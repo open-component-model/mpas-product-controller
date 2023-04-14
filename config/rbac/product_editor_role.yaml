@@ -1,0 +1,31 @@
+# permissions for end users to edit products.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: product-editor-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: mpas-product-controller
+    app.kubernetes.io/part-of: mpas-product-controller
+    app.kubernetes.io/managed-by: kustomize
+  name: product-editor-role
+rules:
+- apiGroups:
+  - mpas.ocm.software
+  resources:
+  - products
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - mpas.ocm.software
+  resources:
+  - products/status
+  verbs:
+  - get
