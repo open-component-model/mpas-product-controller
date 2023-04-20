@@ -10,8 +10,6 @@ import (
 
 // ProductSpec defines the desired state of Product
 type ProductSpec struct {
-	// Foo is an example field of Product. Edit product_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
 }
 
 // ProductStatus defines the observed state of Product
