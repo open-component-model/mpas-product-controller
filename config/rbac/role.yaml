@@ -8,6 +8,32 @@ rules:
 - apiGroups:
   - mpas.ocm.software
   resources:
+  - productdeploymentgenerators
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - mpas.ocm.software
+  resources:
+  - productdeploymentgenerators/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - mpas.ocm.software
+  resources:
+  - productdeploymentgenerators/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - mpas.ocm.software
+  resources:
   - products
   verbs:
   - create
