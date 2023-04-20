@@ -1,0 +1,12 @@
+apiVersion: mpas.ocm.software/v1alpha1
+kind: ProductDeployment
+metadata:
+  labels:
+    app.kubernetes.io/name: productdeployment
+    app.kubernetes.io/instance: productdeployment-sample
+    app.kubernetes.io/part-of: mpas-product-controller
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: mpas-product-controller
+  name: productdeployment-sample
+spec:
+  # TODO(user): Add fields here

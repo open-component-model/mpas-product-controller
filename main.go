@@ -77,18 +77,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controllers.ProductReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Product")
-		os.Exit(1)
-	}
 	if err = (&controllers.ProductDeploymentGeneratorReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ProductDeploymentGenerator")
+		os.Exit(1)
+	}
+	if err = (&controllers.ProductDeploymentReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ProductDeployment")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

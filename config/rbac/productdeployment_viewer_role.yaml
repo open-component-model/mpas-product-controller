@@ -1,0 +1,27 @@
+# permissions for end users to view productdeployments.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: productdeployment-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: mpas-product-controller
+    app.kubernetes.io/part-of: mpas-product-controller
+    app.kubernetes.io/managed-by: kustomize
+  name: productdeployment-viewer-role
+rules:
+- apiGroups:
+  - mpas.ocm.software
+  resources:
+  - productdeployments
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - mpas.ocm.software
+  resources:
+  - productdeployments/status
+  verbs:
+  - get
