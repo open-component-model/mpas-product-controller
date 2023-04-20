@@ -3,17 +3,17 @@ kind: ClusterRoleBinding
 metadata:
   labels:
     app.kubernetes.io/name: clusterrolebinding
-    app.kubernetes.io/instance: manager-rolebinding
+    app.kubernetes.io/instance: mpas-product-controller-rolebinding
     app.kubernetes.io/component: rbac
     app.kubernetes.io/created-by: mpas-product-controller
     app.kubernetes.io/part-of: mpas-product-controller
     app.kubernetes.io/managed-by: kustomize
-  name: manager-rolebinding
+  name: mpas-product-controller-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: manager-role
+  name: mpas-product-controller-role
 subjects:
 - kind: ServiceAccount
-  name: controller-manager
+  name: mpas-product-controller
   namespace: system
