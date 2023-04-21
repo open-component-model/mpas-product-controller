@@ -59,22 +59,28 @@ spec:
                 type: object
               pipelines:
                 items:
+                  description: Pipelines defines a set of steps that can be performed
+                    in order to deploy a product.
                   properties:
                     configuration:
+                      description: Configuration defines a list of rules to follow
+                        and an optional values file.
                       properties:
                         rules:
-                          items:
-                            properties:
-                              name:
-                                type: string
-                              version:
-                                type: string
-                            required:
-                            - name
-                            - version
-                            type: object
-                          type: array
+                          description: NamedVersion defines a specific version for
+                            a given name of an object.
+                          properties:
+                            name:
+                              type: string
+                            version:
+                              type: string
+                          required:
+                          - name
+                          - version
+                          type: object
                         valuesFile:
+                          description: ValuesFile defines a path to a values file
+                            containing User configuration.
                           properties:
                             path:
                               type: string
@@ -83,30 +89,31 @@ spec:
                           type: object
                       required:
                       - rules
-                      - valuesFile
                       type: object
                     localization:
+                      description: Localization defines a list of rules which are
+                        named versions.
                       properties:
                         rules:
-                          items:
-                            properties:
-                              name:
-                                type: string
-                              version:
-                                type: string
-                            required:
-                            - name
-                            - version
-                            type: object
-                          type: array
+                          description: NamedVersion defines a specific version for
+                            a given name of an object.
+                          properties:
+                            name:
+                              type: string
+                            version:
+                              type: string
+                          required:
+                          - name
+                          - version
+                          type: object
                       required:
                       - rules
                       type: object
                     name:
                       type: string
                     resource:
-                      description: 'TODO: This might be something else with an optional
-                        identity and ref?'
+                      description: NamedVersion defines a specific version for a given
+                        name of an object.
                       properties:
                         name:
                           type: string
@@ -117,6 +124,8 @@ spec:
                       - version
                       type: object
                     targetRole:
+                      description: TargetRole the role defining what targets are available
+                        to deploy to.
                       properties:
                         selector:
                           description: A label selector is a label query over a set
@@ -181,20 +190,6 @@ spec:
                   - targetRole
                   type: object
                 type: array
-              targetRef:
-                description: NamespacedObjectReference contains enough information
-                  to locate the referenced Kubernetes resource object in any namespace.
-                properties:
-                  name:
-                    description: Name of the referent.
-                    type: string
-                  namespace:
-                    description: Namespace of the referent, when not specified it
-                      acts as LocalObjectReference.
-                    type: string
-                required:
-                - name
-                type: object
             required:
             - component
             - pipelines

@@ -5,43 +5,44 @@
 package v1alpha1
 
 import (
-	"github.com/fluxcd/pkg/apis/meta"
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// TODO: This might be something else with an optional identity and ref?
-type Resource struct {
+// NamedVersion defines a specific version for a given name of an object.
+type NamedVersion struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
 }
 
-type Rules struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
-}
-
+// Localization defines a list of rules which are named versions.
 type Localization struct {
-	Rules []Rules `json:"rules"`
+	Rules NamedVersion `json:"rules"`
 }
 
+// ValuesFile defines a path to a values file containing User configuration.
 type ValuesFile struct {
 	Path string `json:"path"`
 }
 
+// Configuration defines a list of rules to follow and an optional values file.
 type Configuration struct {
-	Rules      []Rules    `json:"rules"`
-	ValuesFile ValuesFile `json:"valuesFile"`
+	Rules NamedVersion `json:"rules"`
+
+	//+optional
+	ValuesFile ValuesFile `json:"valuesFile,omitempty"`
 }
 
+// TargetRole the role defining what targets are available to deploy to.
 type TargetRole struct {
 	Type     string               `json:"type"`
 	Selector metav1.LabelSelector `json:"selector"`
 }
 
+// Pipelines defines a set of steps that can be performed in order to deploy a product.
 type Pipelines struct {
 	Name          string        `json:"name"`
-	Resource      Resource      `json:"resource"`
+	Resource      NamedVersion  `json:"resource"`
 	Localization  Localization  `json:"localization"`
 	Configuration Configuration `json:"configuration"`
 	TargetRole    TargetRole    `json:"targetRole"`
@@ -51,9 +52,6 @@ type Pipelines struct {
 type ProductDeploymentSpec struct {
 	Component replicationv1.Component `json:"component"`
 	Pipelines []Pipelines             `json:"pipelines"`
-
-	//+optional
-	TargetRef *meta.NamespacedObjectReference `json:"targetRef,omitempty"`
 }
 
 // ProductDeploymentStatus defines the observed state of ProductDeployment.
