@@ -67,12 +67,47 @@ spec:
                         and an optional values file.
                       properties:
                         rules:
-                          description: NamedVersion defines a specific version for
-                            a given name of an object.
+                          description: ElementMeta defines a object that is uniquely
+                            identified by its identity.
                           properties:
+                            extraIdentity:
+                              additionalProperties:
+                                type: string
+                              description: ExtraIdentity is the identity of an object.
+                                An additional label with key "name" ist not allowed
+                              type: object
+                            labels:
+                              description: Labels defines an optional set of additional
+                                labels describing the object.
+                              items:
+                                description: Label is a label that can be set on objects.
+                                properties:
+                                  name:
+                                    description: Name is the unique name of the label.
+                                    type: string
+                                  signing:
+                                    description: Signing describes whether the label
+                                      should be included into the signature
+                                    type: boolean
+                                  value:
+                                    description: Value is the json/yaml data of the
+                                      label
+                                    x-kubernetes-preserve-unknown-fields: true
+                                  version:
+                                    description: Version is the optional specification
+                                      version of the attribute value
+                                    type: string
+                                required:
+                                - name
+                                - value
+                                type: object
+                              type: array
                             name:
+                              description: Name is the context unique name of the
+                                object.
                               type: string
                             version:
+                              description: Version is the semver version of the object.
                               type: string
                           required:
                           - name
@@ -95,12 +130,47 @@ spec:
                         named versions.
                       properties:
                         rules:
-                          description: NamedVersion defines a specific version for
-                            a given name of an object.
+                          description: ElementMeta defines a object that is uniquely
+                            identified by its identity.
                           properties:
+                            extraIdentity:
+                              additionalProperties:
+                                type: string
+                              description: ExtraIdentity is the identity of an object.
+                                An additional label with key "name" ist not allowed
+                              type: object
+                            labels:
+                              description: Labels defines an optional set of additional
+                                labels describing the object.
+                              items:
+                                description: Label is a label that can be set on objects.
+                                properties:
+                                  name:
+                                    description: Name is the unique name of the label.
+                                    type: string
+                                  signing:
+                                    description: Signing describes whether the label
+                                      should be included into the signature
+                                    type: boolean
+                                  value:
+                                    description: Value is the json/yaml data of the
+                                      label
+                                    x-kubernetes-preserve-unknown-fields: true
+                                  version:
+                                    description: Version is the optional specification
+                                      version of the attribute value
+                                    type: string
+                                required:
+                                - name
+                                - value
+                                type: object
+                              type: array
                             name:
+                              description: Name is the context unique name of the
+                                object.
                               type: string
                             version:
+                              description: Version is the semver version of the object.
                               type: string
                           required:
                           - name
@@ -112,12 +182,45 @@ spec:
                     name:
                       type: string
                     resource:
-                      description: NamedVersion defines a specific version for a given
-                        name of an object.
+                      description: ElementMeta defines a object that is uniquely identified
+                        by its identity.
                       properties:
+                        extraIdentity:
+                          additionalProperties:
+                            type: string
+                          description: ExtraIdentity is the identity of an object.
+                            An additional label with key "name" ist not allowed
+                          type: object
+                        labels:
+                          description: Labels defines an optional set of additional
+                            labels describing the object.
+                          items:
+                            description: Label is a label that can be set on objects.
+                            properties:
+                              name:
+                                description: Name is the unique name of the label.
+                                type: string
+                              signing:
+                                description: Signing describes whether the label should
+                                  be included into the signature
+                                type: boolean
+                              value:
+                                description: Value is the json/yaml data of the label
+                                x-kubernetes-preserve-unknown-fields: true
+                              version:
+                                description: Version is the optional specification
+                                  version of the attribute value
+                                type: string
+                            required:
+                            - name
+                            - value
+                            type: object
+                          type: array
                         name:
+                          description: Name is the context unique name of the object.
                           type: string
                         version:
+                          description: Version is the semver version of the object.
                           type: string
                       required:
                       - name
