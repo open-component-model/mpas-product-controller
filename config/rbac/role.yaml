@@ -6,6 +6,18 @@ metadata:
   name: mpas-product-controller-role
 rules:
 - apiGroups:
+  - delivery.ocm.software
+  resources:
+  - componentsubscriptions
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - mpas.ocm.software
   resources:
   - productdeploymentgenerators
