@@ -5,25 +5,75 @@
 package v1alpha1
 
 import (
+	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
-// ProductDeploymentSpec defines the desired state of ProductDeployment
-type ProductDeploymentSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of ProductDeployment. Edit productdeployment_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+// NamedVersion defines a specific version for a given name of an object.
+type NamedVersion struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
 }
 
-// ProductDeploymentStatus defines the observed state of ProductDeployment
+// Localization defines a list of rules which are named versions.
+type Localization struct {
+	Rules NamedVersion `json:"rules"`
+}
+
+// ValuesFile defines a path to a values file containing User configuration.
+type ValuesFile struct {
+	Path string `json:"path"`
+}
+
+// Configuration defines a list of rules to follow and an optional values file.
+type Configuration struct {
+	Rules NamedVersion `json:"rules"`
+
+	//+optional
+	ValuesFile ValuesFile `json:"valuesFile,omitempty"`
+}
+
+// TargetRole the role defining what targets are available to deploy to.
+type TargetRole struct {
+	Type     string               `json:"type"`
+	Selector metav1.LabelSelector `json:"selector"`
+}
+
+// Pipelines defines a set of steps that can be performed in order to deploy a product.
+type Pipelines struct {
+	Name          string        `json:"name"`
+	Resource      NamedVersion  `json:"resource"`
+	Localization  Localization  `json:"localization"`
+	Configuration Configuration `json:"configuration"`
+	TargetRole    TargetRole    `json:"targetRole"`
+}
+
+// ProductDeploymentSpec defines the desired state of ProductDeployment.
+type ProductDeploymentSpec struct {
+	Component replicationv1.Component `json:"component"`
+	Pipelines []Pipelines             `json:"pipelines"`
+}
+
+// ProductDeploymentStatus defines the observed state of ProductDeployment.
 type ProductDeploymentStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// ObservedGeneration is the last reconciled generation.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// +optional
+	// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
+	// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// GetConditions returns the conditions of the ComponentVersion.
+func (in *ProductDeployment) GetConditions() []metav1.Condition {
+	return in.Status.Conditions
+}
+
+// SetConditions sets the conditions of the ComponentVersion.
+func (in *ProductDeployment) SetConditions(conditions []metav1.Condition) {
+	in.Status.Conditions = conditions
 }
 
 //+kubebuilder:object:root=true
