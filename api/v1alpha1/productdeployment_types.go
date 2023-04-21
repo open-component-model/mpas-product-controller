@@ -5,48 +5,10 @@
 package v1alpha1
 
 import (
+	"github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/versions/ocm.software/v3alpha1"
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-// NamedVersion defines a specific version for a given name of an object.
-type NamedVersion struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
-}
-
-// Localization defines a list of rules which are named versions.
-type Localization struct {
-	Rules NamedVersion `json:"rules"`
-}
-
-// ValuesFile defines a path to a values file containing User configuration.
-type ValuesFile struct {
-	Path string `json:"path"`
-}
-
-// Configuration defines a list of rules to follow and an optional values file.
-type Configuration struct {
-	Rules NamedVersion `json:"rules"`
-
-	//+optional
-	ValuesFile ValuesFile `json:"valuesFile,omitempty"`
-}
-
-// TargetRole the role defining what targets are available to deploy to.
-type TargetRole struct {
-	Type     string               `json:"type"`
-	Selector metav1.LabelSelector `json:"selector"`
-}
-
-// Pipelines defines a set of steps that can be performed in order to deploy a product.
-type Pipelines struct {
-	Name          string        `json:"name"`
-	Resource      NamedVersion  `json:"resource"`
-	Localization  Localization  `json:"localization"`
-	Configuration Configuration `json:"configuration"`
-	TargetRole    TargetRole    `json:"targetRole"`
-}
 
 // ProductDeploymentSpec defines the desired state of ProductDeployment.
 type ProductDeploymentSpec struct {
@@ -64,6 +26,39 @@ type ProductDeploymentStatus struct {
 	// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
 	// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// Localization defines a list of rules which are named versions.
+type Localization struct {
+	Rules v3alpha1.ElementMeta `json:"rules"`
+}
+
+// ValuesFile defines a path to a values file containing User configuration.
+type ValuesFile struct {
+	Path string `json:"path"`
+}
+
+// Configuration defines a list of rules to follow and an optional values file.
+type Configuration struct {
+	Rules v3alpha1.ElementMeta `json:"rules"`
+
+	//+optional
+	ValuesFile ValuesFile `json:"valuesFile,omitempty"`
+}
+
+// TargetRole the role defining what targets are available to deploy to.
+type TargetRole struct {
+	Type     string               `json:"type"`
+	Selector metav1.LabelSelector `json:"selector"`
+}
+
+// Pipelines defines a set of steps that can be performed in order to deploy a product.
+type Pipelines struct {
+	Name          string               `json:"name"`
+	Resource      v3alpha1.ElementMeta `json:"resource"`
+	Localization  Localization         `json:"localization"`
+	Configuration Configuration        `json:"configuration"`
+	TargetRole    TargetRole           `json:"targetRole"`
 }
 
 // GetConditions returns the conditions of the ComponentVersion.
