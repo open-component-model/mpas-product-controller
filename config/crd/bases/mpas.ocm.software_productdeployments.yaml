@@ -33,13 +33,17 @@ spec:
           metadata:
             type: object
           spec:
-            description: ProductDeploymentSpec defines the desired state of ProductDeployment
+            description: ProductDeploymentSpec defines the desired state of ProductDeployment.
             properties:
               component:
+                description: Component gathers together reconciled information about
+                  a component.
                 properties:
                   name:
                     type: string
                   registry:
+                    description: Registry defines information about the location of
+                      a component.
                     properties:
                       url:
                         type: string
@@ -112,19 +116,91 @@ spec:
                       - name
                       - version
                       type: object
+                    targetRole:
+                      properties:
+                        selector:
+                          description: A label selector is a label query over a set
+                            of resources. The result of matchLabels and matchExpressions
+                            are ANDed. An empty label selector matches all objects.
+                            A null label selector matches no objects.
+                          properties:
+                            matchExpressions:
+                              description: matchExpressions is a list of label selector
+                                requirements. The requirements are ANDed.
+                              items:
+                                description: A label selector requirement is a selector
+                                  that contains values, a key, and an operator that
+                                  relates the key and values.
+                                properties:
+                                  key:
+                                    description: key is the label key that the selector
+                                      applies to.
+                                    type: string
+                                  operator:
+                                    description: operator represents a key's relationship
+                                      to a set of values. Valid operators are In,
+                                      NotIn, Exists and DoesNotExist.
+                                    type: string
+                                  values:
+                                    description: values is an array of string values.
+                                      If the operator is In or NotIn, the values array
+                                      must be non-empty. If the operator is Exists
+                                      or DoesNotExist, the values array must be empty.
+                                      This array is replaced during a strategic merge
+                                      patch.
+                                    items:
+                                      type: string
+                                    type: array
+                                required:
+                                - key
+                                - operator
+                                type: object
+                              type: array
+                            matchLabels:
+                              additionalProperties:
+                                type: string
+                              description: matchLabels is a map of {key,value} pairs.
+                                A single {key,value} in the matchLabels map is equivalent
+                                to an element of matchExpressions, whose key field
+                                is "key", the operator is "In", and the values array
+                                contains only "value". The requirements are ANDed.
+                              type: object
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        type:
+                          type: string
+                      required:
+                      - selector
+                      - type
+                      type: object
                   required:
                   - configuration
                   - localization
                   - name
                   - resource
+                  - targetRole
                   type: object
                 type: array
+              targetRef:
+                description: NamespacedObjectReference contains enough information
+                  to locate the referenced Kubernetes resource object in any namespace.
+                properties:
+                  name:
+                    description: Name of the referent.
+                    type: string
+                  namespace:
+                    description: Namespace of the referent, when not specified it
+                      acts as LocalObjectReference.
+                    type: string
+                required:
+                - name
+                type: object
             required:
             - component
             - pipelines
             type: object
           status:
-            description: ProductDeploymentStatus defines the observed state of ProductDeployment
+            description: ProductDeploymentStatus defines the observed state of ProductDeployment.
             properties:
               conditions:
                 items:

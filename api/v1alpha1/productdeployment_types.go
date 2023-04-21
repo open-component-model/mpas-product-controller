@@ -5,18 +5,10 @@
 package v1alpha1
 
 import (
+	"github.com/fluxcd/pkg/apis/meta"
+	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-type Registry struct {
-	URL string `json:"url"`
-}
-
-type Component struct {
-	Name     string   `json:"name"`
-	Version  string   `json:"version"`
-	Registry Registry `json:"registry"`
-}
 
 // TODO: This might be something else with an optional identity and ref?
 type Resource struct {
@@ -42,20 +34,29 @@ type Configuration struct {
 	ValuesFile ValuesFile `json:"valuesFile"`
 }
 
+type TargetRole struct {
+	Type     string               `json:"type"`
+	Selector metav1.LabelSelector `json:"selector"`
+}
+
 type Pipelines struct {
 	Name          string        `json:"name"`
 	Resource      Resource      `json:"resource"`
 	Localization  Localization  `json:"localization"`
 	Configuration Configuration `json:"configuration"`
+	TargetRole    TargetRole    `json:"targetRole"`
 }
 
-// ProductDeploymentSpec defines the desired state of ProductDeployment
+// ProductDeploymentSpec defines the desired state of ProductDeployment.
 type ProductDeploymentSpec struct {
-	Component Component   `json:"component"`
-	Pipelines []Pipelines `json:"pipelines"`
+	Component replicationv1.Component `json:"component"`
+	Pipelines []Pipelines             `json:"pipelines"`
+
+	//+optional
+	TargetRef *meta.NamespacedObjectReference `json:"targetRef,omitempty"`
 }
 
-// ProductDeploymentStatus defines the observed state of ProductDeployment
+// ProductDeploymentStatus defines the observed state of ProductDeployment.
 type ProductDeploymentStatus struct {
 	// ObservedGeneration is the last reconciled generation.
 	// +optional
