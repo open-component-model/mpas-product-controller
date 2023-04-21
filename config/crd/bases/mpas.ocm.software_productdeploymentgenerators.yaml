@@ -36,6 +36,38 @@ spec:
           spec:
             description: ProductDeploymentGeneratorSpec defines the desired state
               of ProductDeploymentGenerator
+            properties:
+              interval:
+                description: Interval is the reconciliation interval, i.e. at what
+                  interval shall a reconciliation happen. This is used to requeue
+                  objects for reconciliation in case the related subscription hasn't
+                  been finished yet.
+                type: string
+              repositoryRef:
+                description: RepositoryRef represents the name of a repository.
+                properties:
+                  name:
+                    type: string
+                required:
+                - name
+                type: object
+              subscriptionRef:
+                description: NamespacedObjectReference contains enough information
+                  to locate the referenced Kubernetes resource object in any namespace.
+                properties:
+                  name:
+                    description: Name of the referent.
+                    type: string
+                  namespace:
+                    description: Namespace of the referent, when not specified it
+                      acts as LocalObjectReference.
+                    type: string
+                required:
+                - name
+                type: object
+            required:
+            - interval
+            - subscriptionRef
             type: object
           status:
             description: ProductDeploymentGeneratorStatus defines the observed state
