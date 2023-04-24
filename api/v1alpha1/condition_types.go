@@ -5,9 +5,11 @@
 package v1alpha1
 
 const (
-	// PatchFailedReason is used when we couldn't patch an object.
-	PatchFailedReason = "PatchFailed"
-
 	// ComponentSubscriptionGetFailedReason is used when the subscription object cannot be found.
 	ComponentSubscriptionGetFailedReason = "ComponentSubscriptionGetFailed"
+
+	// ComponentVersionGetFailedReason is used when the subscription object cannot be found.
+	ComponentVersionGetFailedReason = "ComponentVersionGetFailed"
+
+	OCMAuthenticationFailedReason = "OCMAuthenticationFailed"
 )

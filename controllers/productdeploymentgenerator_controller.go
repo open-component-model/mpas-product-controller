@@ -12,7 +12,7 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
-	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
+	"github.com/open-component-model/mpas-product-controller/pkg/ocm"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -23,13 +23,50 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
+
 	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
 )
+
+const (
+	ProductDescriptionType = "productdescription.mpas.ocm.software"
+)
+
+var productDescriptor = `apiVersion: meta.mpas.ocm.software/v1alpha1
+kind: ProductDescription
+metadata:
+  name: sample-descriptor
+spec:
+  description: string
+  pipelines:
+  - name: backend
+    source:
+      name: deployment
+      version: 0.0.1
+    validation:
+      name: validation-example
+      version: 0.0.1
+  targetRoles:
+  - name: string # (required) the name of the target
+    type: string # (required) the type of target
+    selector: # (required)
+      matchLabels:
+        string: string
+      matchExpressions:
+        - { key: string, operator: In, values: [string] }
+        - { key: string, operator: NotIn, values: [string] }
+# out of scope
+# dependsOn:
+# - component: string
+#  version: string
+`
 
 // ProductDeploymentGeneratorReconciler reconciles a ProductDeploymentGenerator object
 type ProductDeploymentGeneratorReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	OCMClient ocm.Client
 }
 
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeploymentgenerators,verbs=get;list;watch;create;update;patch;delete
@@ -122,6 +159,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		Namespace: obj.Spec.SubscriptionRef.Namespace,
 	}, subscription); err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ComponentSubscriptionGetFailedReason, err.Error())
+
 		return ctrl.Result{}, fmt.Errorf("failed to find subscription object: %w", err)
 	}
 
@@ -133,6 +171,24 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 	component := subscription.GetComponentVersion()
 	logger.Info("fetching component", "component", component)
+
+	octx, err := r.OCMClient.CreateAuthenticatedOCMContext(ctx, obj.Spec.ServiceAccountName, obj.Namespace)
+	if err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.OCMAuthenticationFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to authenticate using service account: %w", err)
+	}
+
+	cv, err := r.OCMClient.GetComponentVersion(ctx, octx, component.Registry.URL, component.Name, component.Version)
+	if err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ComponentVersionGetFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to authenticate using service account: %w", err)
+	}
+
+	logger.Info("retrieved component version, fetching ProductDescription resource", "component", cv.GetName())
+
+	// TODO: Insert OCM resource fetch here.
 
 	return ctrl.Result{}, nil
 }
