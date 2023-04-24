@@ -17,6 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -29,10 +30,14 @@ import (
 )
 
 const (
+	// ProductDescriptionType defines the type of the ProductDescription resource in the component version.
 	ProductDescriptionType = "productdescription.mpas.ocm.software"
+
+	// MaximumNumberOfConcurrentPipelineRuns defines how many concurrent running pipelines there can be.
+	MaximumNumberOfConcurrentPipelineRuns = 10
 )
 
-var productDescriptor = `apiVersion: meta.mpas.ocm.software/v1alpha1
+var productDescription = `apiVersion: meta.mpas.ocm.software/v1alpha1
 kind: ProductDescription
 metadata:
   name: sample-descriptor
@@ -46,19 +51,6 @@ spec:
     validation:
       name: validation-example
       version: 0.0.1
-  targetRoles:
-  - name: string # (required) the name of the target
-    type: string # (required) the type of target
-    selector: # (required)
-      matchLabels:
-        string: string
-      matchExpressions:
-        - { key: string, operator: In, values: [string] }
-        - { key: string, operator: NotIn, values: [string] }
-# out of scope
-# dependsOn:
-# - component: string
-#  version: string
 `
 
 // ProductDeploymentGeneratorReconciler reconciles a ProductDeploymentGenerator object
@@ -189,6 +181,10 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	logger.Info("retrieved component version, fetching ProductDescription resource", "component", cv.GetName())
 
 	// TODO: Insert OCM resource fetch here.
+	prodDesc := &v1alpha1.ProductDescription{}
+	if err := yaml.Unmarshal([]byte(productDescription), prodDesc); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to unmarshal product description: %w", err)
+	}
 
 	return ctrl.Result{}, nil
 }
