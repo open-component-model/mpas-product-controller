@@ -13,7 +13,7 @@ import (
 // ProductDeploymentSpec defines the desired state of ProductDeployment.
 type ProductDeploymentSpec struct {
 	Component replicationv1.Component `json:"component"`
-	Pipelines []Pipelines             `json:"pipelines"`
+	Pipelines []Pipeline              `json:"pipelines"`
 }
 
 // ProductDeploymentStatus defines the observed state of ProductDeployment.
@@ -52,8 +52,8 @@ type TargetRole struct {
 	Selector metav1.LabelSelector `json:"selector"`
 }
 
-// Pipelines defines a set of steps that can be performed in order to deploy a product.
-type Pipelines struct {
+// Pipeline defines a set of steps that can be performed in order to deploy a product.
+type Pipeline struct {
 	Name          string               `json:"name"`
 	Resource      v3alpha1.ElementMeta `json:"resource"`
 	Localization  Localization         `json:"localization"`

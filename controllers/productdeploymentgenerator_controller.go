@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
+	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -186,6 +187,27 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{}, fmt.Errorf("failed to unmarshal product description: %w", err)
 	}
 
+	productDeployment := &v1alpha1.ProductDeployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      prodDesc.Name,
+			Namespace: obj.Namespace,
+		},
+	}
+
+	spec := v1alpha1.ProductDeploymentSpec{}
+
+	for _, p := range prodDesc.Spec.Pipelines {
+		spec.Pipelines = append(spec.Pipelines, r.createProductPipeline(p))
+	}
+
+	productDeployment.Spec = spec
+
+	if err := r.Create(ctx, productDeployment); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to create product deployment object: %w", err)
+	}
+
+	logger.Info("successfully generated product deployment", "productDeployment", klog.KObj(productDeployment))
+
 	return ctrl.Result{}, nil
 }
 
@@ -194,4 +216,16 @@ func (r *ProductDeploymentGeneratorReconciler) SetupWithManager(mgr ctrl.Manager
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.ProductDeploymentGenerator{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Complete(r)
+}
+
+func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(p v1alpha1.ProductDescriptionPipeline) v1alpha1.Pipeline {
+	var result v1alpha1.Pipeline
+	// Gather Source
+	result.Name = p.Name
+
+	// Gather Localization
+
+	// Gather Configuration
+
+	return result
 }
