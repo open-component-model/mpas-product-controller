@@ -59,7 +59,7 @@ spec:
                 type: object
               pipelines:
                 items:
-                  description: Pipelines defines a set of steps that can be performed
+                  description: Pipeline defines a set of steps that can be performed
                     in order to deploy a product.
                   properties:
                     configuration:
