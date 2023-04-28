@@ -9,6 +9,8 @@ import (
 	"os"
 
 	"github.com/open-component-model/mpas-product-controller/pkg/ocm"
+	v1alpha12 "github.com/open-component-model/ocm-controller/api/v1alpha1"
+	"github.com/open-component-model/ocm-controller/pkg/oci"
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -36,6 +38,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(replicationv1.AddToScheme(scheme))
 	utilruntime.Must(mpasv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(v1alpha12.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -43,11 +46,15 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
+	var ociRegistryAddr string
+
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&ociRegistryAddr, "oci-registry-addr", ":5000", "The address of the OCI registry.")
+
 	opts := zap.Options{
 		Development: true,
 	}
@@ -79,11 +86,14 @@ func main() {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
+
+	cache := oci.NewClient(ociRegistryAddr)
 	ocmClient := ocm.NewClient(mgr.GetClient())
 	if err = (&controllers.ProductDeploymentGeneratorReconciler{
 		Client:    mgr.GetClient(),
 		Scheme:    mgr.GetScheme(),
 		OCMClient: ocmClient,
+		Cache:     cache,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ProductDeploymentGenerator")
 		os.Exit(1)

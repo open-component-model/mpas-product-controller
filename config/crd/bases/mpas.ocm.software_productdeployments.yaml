@@ -59,8 +59,7 @@ spec:
                 type: object
               pipelines:
                 items:
-                  description: Pipeline defines a set of Localizations/Configurations
-                    to apply to a resource and a target role.
+                  description: Pipeline defines a set of Loca
                   properties:
                     configuration:
                       description: Configuration defines a list of rules to follow
