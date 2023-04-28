@@ -12,4 +12,8 @@ const (
 	ComponentVersionGetFailedReason = "ComponentVersionGetFailed"
 
 	OCMAuthenticationFailedReason = "OCMAuthenticationFailed"
+
+	ProductDescriptionGetFailedReason = "ProductDescriptionGetFailed"
+
+	NumberOfProductDescriptionsInComponentIncorrectReason = "NumberOfProductDescriptionsInComponentIncorrect"
 )

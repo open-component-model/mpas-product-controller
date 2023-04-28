@@ -8,6 +8,9 @@ import (
 	"flag"
 	"os"
 
+	"github.com/open-component-model/mpas-product-controller/pkg/ocm"
+	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -31,7 +34,7 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
+	utilruntime.Must(replicationv1.AddToScheme(scheme))
 	utilruntime.Must(mpasv1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
@@ -76,10 +79,11 @@ func main() {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
-
+	ocmClient := ocm.NewClient(mgr.GetClient())
 	if err = (&controllers.ProductDeploymentGeneratorReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:    mgr.GetClient(),
+		Scheme:    mgr.GetScheme(),
+		OCMClient: ocmClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ProductDeploymentGenerator")
 		os.Exit(1)

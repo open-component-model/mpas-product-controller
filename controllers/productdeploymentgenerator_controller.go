@@ -8,11 +8,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
-	"github.com/open-component-model/mpas-product-controller/pkg/ocm"
+	"github.com/open-component-model/ocm/pkg/common/compression"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -28,6 +29,7 @@ import (
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 
 	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
+	"github.com/open-component-model/mpas-product-controller/pkg/ocm"
 )
 
 const (
@@ -38,34 +40,20 @@ const (
 	MaximumNumberOfConcurrentPipelineRuns = 10
 )
 
-var productDescription = `apiVersion: meta.mpas.ocm.software/v1alpha1
-kind: ProductDescription
-metadata:
-  name: sample-descriptor
-spec:
-  description: string
-  pipelines:
-  - name: backend
-    source:
-      name: deployment
-      version: 0.0.1
-    validation:
-      name: validation-example
-      version: 0.0.1
-`
-
 // ProductDeploymentGeneratorReconciler reconciles a ProductDeploymentGenerator object
 type ProductDeploymentGeneratorReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 
-	OCMClient ocm.Client
+	OCMClient ocm.Contract
 }
 
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeploymentgenerators,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeploymentgenerators/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeploymentgenerators/finalizers,verbs=update
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=componentsubscriptions,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -79,11 +67,13 @@ func (r *ProductDeploymentGeneratorReconciler) Reconcile(ctx context.Context, re
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
+
+		return ctrl.Result{}, fmt.Errorf("failed to get product deployment generator: %w", err)
 	}
 
 	var patchHelper *patch.Helper
 	if patchHelper, err = patch.NewHelper(obj, r.Client); err != nil {
-		return
+		return ctrl.Result{}, fmt.Errorf("failed to create patch helper: %w", err)
 	}
 
 	// Always attempt to patch the object and status after each reconciliation.
@@ -181,11 +171,62 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 	logger.Info("retrieved component version, fetching ProductDescription resource", "component", cv.GetName())
 
-	// TODO: Insert OCM resource fetch here.
+	resources, err := cv.GetDescriptor().GetResourcesByType(ProductDescriptionType)
+	if err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to find the product description on the component: %w", err)
+	}
+
+	if resources.Len() != 1 {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.NumberOfProductDescriptionsInComponentIncorrectReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("number of product descriptions in component should be 1 but was: %d", resources.Len())
+	}
+
+	resource := resources.Get(0)
+
+	descriptor, err := cv.GetResource(resource.GetMeta().GetIdentity(resources))
+	if err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to find the product description on the component: %w", err)
+	}
+
+	am, err := descriptor.AccessMethod()
+	if err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to get access method for product description: %w", err)
+	}
+
+	reader, err := am.Reader()
+	if err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to get product description content: %w", err)
+	}
+
+	decompressed, _, err := compression.AutoDecompress(reader)
+	if err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to get decompressed reader: %w", err)
+	}
+
+	content, err := io.ReadAll(decompressed)
+	if err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to read content for product description: %w", err)
+	}
+
 	prodDesc := &v1alpha1.ProductDescription{}
-	if err := yaml.Unmarshal([]byte(productDescription), prodDesc); err != nil {
+	if err := yaml.Unmarshal(content, prodDesc); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to unmarshal product description: %w", err)
 	}
+
+	logger.Info("fetched product description", "description", klog.KObj(prodDesc))
 
 	productDeployment := &v1alpha1.ProductDeployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -195,6 +236,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	}
 
 	spec := v1alpha1.ProductDeploymentSpec{}
+	spec.Component = component
 
 	for _, p := range prodDesc.Spec.Pipelines {
 		spec.Pipelines = append(spec.Pipelines, r.createProductPipeline(p))
@@ -218,14 +260,20 @@ func (r *ProductDeploymentGeneratorReconciler) SetupWithManager(mgr ctrl.Manager
 		Complete(r)
 }
 
+// createProductPipeline takes a pipeline description and builds up all the Kubernetes objects that are needed
+// for that resource. This can be done in parallel but the many objects could possibly overwhelm the environment?
+// TODO: Figure out how that pipeline item being reconciled will help.
+// The pipeline list now can't be a list of items, it's either a reference to a pipeline item, or
+// somehow being reconciled and THEN put back as a list. I haven't thought about that previously..
 func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(p v1alpha1.ProductDescriptionPipeline) v1alpha1.Pipeline {
 	var result v1alpha1.Pipeline
 	// Gather Source
 	result.Name = p.Name
 
-	// Gather Localization
+	// TODO: We build the localization here not get it. It doesn't exist.
+	// BUILD Localization
 
-	// Gather Configuration
+	// BUILD Configuration
 
 	return result
 }

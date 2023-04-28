@@ -59,8 +59,8 @@ spec:
                 type: object
               pipelines:
                 items:
-                  description: Pipeline defines a set of steps that can be performed
-                    in order to deploy a product.
+                  description: Pipeline defines a set of Localizations/Configurations
+                    to apply to a resource and a target role.
                   properties:
                     configuration:
                       description: Configuration defines a list of rules to follow

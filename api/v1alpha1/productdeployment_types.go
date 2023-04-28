@@ -52,7 +52,7 @@ type TargetRole struct {
 	Selector metav1.LabelSelector `json:"selector"`
 }
 
-// Pipeline defines a set of steps that can be performed in order to deploy a product.
+// Pipeline defines a set of Localizations/Configurations to apply to a resource and a target role.
 type Pipeline struct {
 	Name          string               `json:"name"`
 	Resource      v3alpha1.ElementMeta `json:"resource"`
