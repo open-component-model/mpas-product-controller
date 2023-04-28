@@ -8,6 +8,7 @@ import (
 	"flag"
 	"os"
 
+	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
 	"github.com/open-component-model/mpas-product-controller/pkg/ocm"
 	v1alpha12 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	"github.com/open-component-model/ocm-controller/pkg/oci"
@@ -39,6 +40,7 @@ func init() {
 	utilruntime.Must(replicationv1.AddToScheme(scheme))
 	utilruntime.Must(mpasv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(v1alpha12.AddToScheme(scheme))
+	utilruntime.Must(gitv1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 

@@ -70,6 +70,7 @@ type ProductDeploymentGeneratorReconciler struct {
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=snapshots,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=snapshots/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=snapshots/finalizers,verbs=update
+//+kubebuilder:rbac:groups=delivery.ocm.software,resources=syncs,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -282,6 +283,8 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{}, fmt.Errorf("failed to create temp folder: %w", err)
 	}
 
+	defer os.RemoveAll(dir)
+
 	productDeploymentFile, err := os.Create(filepath.Join(dir, "product-deployment.yaml"))
 	if err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
@@ -310,10 +313,11 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	}
 
 	if err := r.writeSnapshot(ctx, snapshot.Name, obj, dir, identity); err != nil {
-
+		return ctrl.Result{}, fmt.Errorf("failed to write to the cache: %w", err)
 	}
 
 	// TODO: Figure out how to get the information on what repository object the git repository is based on.
+	// TODO: Figure out commit message details. Maybe add a tempate?
 
 	sync := &gitv1alpha1.Sync{
 		ObjectMeta: metav1.ObjectMeta{
@@ -331,11 +335,14 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 				Duration: 1 * time.Minute,
 			},
 			CommitTemplate: gitv1alpha1.CommitTemplate{
-				Name:    "Gergely Brautigam",
-				Email:   "",
-				Message: "New Product Deployment",
+				Name:         "<name>",
+				Email:        "<email>",
+				Message:      "New Product Deployment",
+				TargetBranch: "main",
+				BaseBranch:   "main",
 			},
-			SubPath: ".",
+			AutomaticPullRequestCreation: true,
+			SubPath:                      "generators/.",
 		},
 	}
 

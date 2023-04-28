@@ -81,6 +81,18 @@ rules:
   - patch
   - update
 - apiGroups:
+  - delivery.ocm.software
+  resources:
+  - syncs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - mpas.ocm.software
   resources:
   - productdeploymentgenerators
