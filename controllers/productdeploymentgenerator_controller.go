@@ -17,7 +17,6 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	v1alpha12 "github.com/open-component-model/ocm-controller/api/v1alpha1"
-	"github.com/open-component-model/ocm-controller/pkg/cache"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,7 +28,6 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -37,6 +35,7 @@ import (
 	"github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/versions/ocm.software/v3alpha1"
 
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
+	"github.com/open-component-model/ocm-controller/pkg/snapshot"
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 
 	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
@@ -56,8 +55,8 @@ type ProductDeploymentGeneratorReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 
-	OCMClient ocm.Contract
-	Cache     cache.Cache
+	OCMClient      ocm.Contract
+	SnapshotWriter snapshot.Writer
 }
 
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeploymentgenerators,verbs=get;list;watch;create;update;patch;delete
@@ -302,19 +301,14 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{}, fmt.Errorf("failed to encode product deployment: %w", err)
 	}
 
-	// create a snapshot
-	snapshot := &v1alpha12.Snapshot{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      obj.Name + "-snapshot",
-			Namespace: obj.Namespace,
-		},
-	}
-
+	snapshotName := obj.Name + "-snapshot"
 	identity := v1alpha12.Identity{
 		"ProductDeploymentName": obj.Name,
 	}
 
-	if err := r.writeSnapshot(ctx, snapshot.Name, obj, dir, identity); err != nil {
+	if _, err := r.SnapshotWriter.Write(ctx, v1alpha12.SnapshotTemplateSpec{
+		Name: snapshotName,
+	}, obj, dir, identity); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to write to the cache: %w", err)
 	}
 
@@ -328,7 +322,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		},
 		Spec: gitv1alpha1.SyncSpec{
 			SnapshotRef: corev1.LocalObjectReference{
-				Name: snapshot.Name,
+				Name: snapshotName,
 			},
 			RepositoryRef: corev1.LocalObjectReference{ // TODO: for now create this by hand
 				Name: obj.Spec.RepositoryRef.Name,
@@ -353,84 +347,6 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	}
 
 	return ctrl.Result{}, nil
-}
-
-func (r *ProductDeploymentGeneratorReconciler) writeSnapshot(
-	ctx context.Context,
-	name string,
-	owner client.Object,
-	sourceDir string,
-	identity v1alpha12.Identity,
-) error {
-	artifactPath, err := os.CreateTemp("", "snapshot-artifact-*.tgz")
-	if err != nil {
-		return fmt.Errorf("fs error: %w", err)
-	}
-	defer os.Remove(artifactPath.Name())
-
-	if err := buildTar(artifactPath.Name(), sourceDir); err != nil {
-		return fmt.Errorf("build tar error: %w", err)
-	}
-
-	snapshotDigest, err := r.writeToCache(ctx, identity, artifactPath.Name(), owner.GetResourceVersion())
-	if err != nil {
-		return err
-	}
-
-	snapshotCR := &v1alpha12.Snapshot{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: owner.GetNamespace(),
-		},
-	}
-
-	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, snapshotCR, func() error {
-		if snapshotCR.ObjectMeta.CreationTimestamp.IsZero() {
-			if err := controllerutil.SetOwnerReference(owner, snapshotCR, r.Scheme); err != nil {
-				return fmt.Errorf("failed to set owner reference on snapshot: %w", err)
-			}
-		}
-		snapshotCR.Spec = v1alpha12.SnapshotSpec{
-			Identity: identity,
-			Digest:   snapshotDigest,
-			Tag:      owner.GetResourceVersion(),
-		}
-		return nil
-	})
-
-	if err != nil {
-		return fmt.Errorf("failed to create or update component descriptor: %w", err)
-	}
-
-	return nil
-}
-
-func (r *ProductDeploymentGeneratorReconciler) writeToCache(ctx context.Context, identity v1alpha12.Identity, artifactPath string, version string) (string, error) {
-	file, err := os.Open(artifactPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to open created archive: %w", err)
-	}
-	defer file.Close()
-	name, err := ConstructRepositoryName(identity)
-	if err != nil {
-		return "", fmt.Errorf("failed to construct name: %w", err)
-	}
-	digest, err := r.Cache.PushData(ctx, file, name, version)
-	if err != nil {
-		return "", fmt.Errorf("failed to push blob to local registry: %w", err)
-	}
-
-	return digest, nil
-}
-
-// ConstructRepositoryName hashes the name and passes it back.
-func ConstructRepositoryName(identity v1alpha12.Identity) (string, error) {
-	repositoryName, err := identity.Hash()
-	if err != nil {
-		return "", fmt.Errorf("failed to create hash for identity: %w", err)
-	}
-
-	return repositoryName, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
