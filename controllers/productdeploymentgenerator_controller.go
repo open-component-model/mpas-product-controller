@@ -169,6 +169,8 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 	}
 
+	// TODO: Get the project and get Repository information from there.
+
 	component := subscription.GetComponentVersion()
 	logger.Info("fetching component", "component", component)
 
