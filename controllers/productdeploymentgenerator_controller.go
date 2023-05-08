@@ -16,7 +16,7 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
-	v1alpha12 "github.com/open-component-model/ocm-controller/api/v1alpha1"
+	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -301,19 +301,27 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{}, fmt.Errorf("failed to encode product deployment: %w", err)
 	}
 
-	snapshotName := obj.Name + "-snapshot"
-	identity := v1alpha12.Identity{
+	snapshotName, err := snapshot.GenerateSnapshotName(obj.Name)
+	if err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to generate a snapshot name: %w", err)
+	}
+
+	identity := ocmmetav1.Identity{
 		"ProductDeploymentName": obj.Name,
 	}
 
-	if _, err := r.SnapshotWriter.Write(ctx, v1alpha12.SnapshotTemplateSpec{
-		Name: snapshotName,
-	}, obj, dir, identity); err != nil {
+	digest, err := r.SnapshotWriter.Write(ctx, obj, dir, identity)
+	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to write to the cache: %w", err)
 	}
 
-	// TODO: Figure out how to get the information on what repository object the git repository is based on.
-	// TODO: Figure out commit message details. Maybe add a tempate?
+	obj.Status.LatestSnapshotDigest = digest
+	obj.Status.SnapshotName = snapshotName
+
+	// TODO: Get the repositoryRef from the Project
+	// TODO: Get the commit template from the Project
 
 	sync := &gitv1alpha1.Sync{
 		ObjectMeta: metav1.ObjectMeta{

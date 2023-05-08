@@ -146,10 +146,14 @@ spec:
                   - type
                   type: object
                 type: array
+              latestSnapshotDigest:
+                type: string
               observedGeneration:
                 description: ObservedGeneration is the last reconciled generation.
                 format: int64
                 type: integer
+              snapshotName:
+                type: string
             type: object
         type: object
     served: true

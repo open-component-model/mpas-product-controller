@@ -43,6 +43,22 @@ type ProductDeploymentGeneratorStatus struct {
 	// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
 	// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// +optional
+	LatestSnapshotDigest string `json:"latestSnapshotDigest,omitempty"`
+
+	// +optional
+	SnapshotName string `json:"snapshotName,omitempty"`
+}
+
+// GetSnapshotDigest returns the latest snapshot digest for the localization
+func (in ProductDeploymentGenerator) GetSnapshotDigest() string {
+	return in.Status.LatestSnapshotDigest
+}
+
+// GetSnapshotName returns the key for the snapshot produced by the Localization
+func (in ProductDeploymentGenerator) GetSnapshotName() string {
+	return in.Status.SnapshotName
 }
 
 // GetConditions returns the conditions of the ComponentVersion.
