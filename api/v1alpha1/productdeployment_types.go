@@ -10,6 +10,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	ProductDeploymentNameKey = "product-deployment-name"
+)
+
 // ProductDeploymentSpec defines the desired state of ProductDeployment.
 type ProductDeploymentSpec struct {
 	Component replicationv1.Component `json:"component"`

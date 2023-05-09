@@ -16,7 +16,6 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
-	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,9 +31,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/open-component-model/ocm/pkg/common/compression"
+	"github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc"
+	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
 	"github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/versions/ocm.software/v3alpha1"
 
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
+	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
+	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	"github.com/open-component-model/ocm-controller/pkg/snapshot"
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 
@@ -62,6 +65,7 @@ type ProductDeploymentGeneratorReconciler struct {
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeploymentgenerators,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeploymentgenerators/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeploymentgenerators/finalizers,verbs=update
+//+kubebuilder:rbac:groups=mpas.ocm.software,resources=projects,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=componentsubscriptions,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
@@ -87,10 +91,7 @@ func (r *ProductDeploymentGeneratorReconciler) Reconcile(ctx context.Context, re
 		return ctrl.Result{}, fmt.Errorf("failed to get product deployment generator: %w", err)
 	}
 
-	var patchHelper *patch.Helper
-	if patchHelper, err = patch.NewHelper(obj, r.Client); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to create patch helper: %w", err)
-	}
+	patchHelper := patch.NewSerialPatcher(obj, r.Client)
 
 	// Always attempt to patch the object and status after each reconciliation.
 	defer func() {
@@ -168,7 +169,21 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 	}
 
-	// TODO: Get the project and get Repository information from there.
+	projectList := &projectv1.ProjectList{}
+	if err := r.List(ctx, projectList, client.InNamespace(obj.Namespace)); err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to find project in namespace: %w", err)
+	}
+
+	if v := len(projectList.Items); v != 1 {
+		err := fmt.Errorf("exactly one Project should have been found in namespace %s; got: %d", obj.Namespace, v)
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
+
+		return ctrl.Result{}, err
+	}
+
+	// TODO: Get the Project and stop doing anything until the Project Status contains the Repository name.
 
 	component := subscription.GetComponentVersion()
 	logger.Info("fetching component", "component", component)
@@ -187,31 +202,21 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{}, fmt.Errorf("failed to authenticate using service account: %w", err)
 	}
 
+	resources, err := cv.GetResourcesByResourceSelectors(compdesc.ResourceSelectorFunc(func(obj compdesc.ResourceSelectionContext) (bool, error) {
+		return obj.GetType() == ProductDescriptionType, nil
+	}))
+
 	logger.Info("retrieved component version, fetching ProductDescription resource", "component", cv.GetName())
 
-	resources, err := cv.GetDescriptor().GetResourcesByType(ProductDescriptionType)
-	if err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to find the product description on the component: %w", err)
-	}
-
-	if resources.Len() != 1 {
+	if len(resources) != 1 {
 		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.NumberOfProductDescriptionsInComponentIncorrectReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("number of product descriptions in component should be 1 but was: %d", resources.Len())
+		return ctrl.Result{}, fmt.Errorf("number of product descriptions in component should be 1 but was: %d", len(resources))
 	}
 
-	resource := resources.Get(0)
+	resource := resources[0]
 
-	descriptor, err := cv.GetResource(resource.GetMeta().GetIdentity(resources))
-	if err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to find the product description on the component: %w", err)
-	}
-
-	am, err := descriptor.AccessMethod()
+	am, err := resource.AccessMethod()
 	if err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
 
@@ -248,80 +253,26 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 	logger.Info("fetched product description", "description", klog.KObj(prodDesc))
 
-	productDeployment := &v1alpha1.ProductDeployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      prodDesc.Name,
-			Namespace: obj.Namespace,
-		},
-	}
-
-	spec := v1alpha1.ProductDeploymentSpec{}
-	spec.Component = component
-
-	for _, p := range prodDesc.Spec.Pipelines {
-		pipe, err := r.createProductPipeline(*prodDesc, p)
-		if err != nil {
-			conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
-
-			return ctrl.Result{}, fmt.Errorf("failed to create product pipeline: %w", err)
-		}
-		spec.Pipelines = append(spec.Pipelines, pipe)
-	}
-
-	productDeployment.Spec = spec
-
-	logger.Info("successfully generated product deployment", "productDeployment", klog.KObj(productDeployment))
-
-	serializer := json.NewSerializerWithOptions(json.DefaultMetaFactory, r.Scheme, r.Scheme, json.SerializerOptions{
-		Yaml:   true,
-		Pretty: true,
-	})
-
-	dir, err := os.MkdirTemp("", "product-deployment")
+	productDeployment, err := r.createProductDeployment(ctx, obj, prodDesc, component)
 	if err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CreateProductPipelineFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to create temp folder: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to create product deployment: %w", err)
 	}
 
-	defer os.RemoveAll(dir)
-
-	productDeploymentFile, err := os.Create(filepath.Join(dir, "product-deployment.yaml"))
+	snapshotName, err := r.createSnapshot(ctx, obj, productDeployment, component)
 	if err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CreateSnapshotFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to create file: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to create snapshot for product deployment: %w", err)
 	}
-
-	defer productDeploymentFile.Close()
-
-	if err := serializer.Encode(productDeployment, productDeploymentFile); err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to encode product deployment: %w", err)
-	}
-
-	snapshotName, err := snapshot.GenerateSnapshotName(obj.Name)
-	if err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to generate a snapshot name: %w", err)
-	}
-
-	identity := ocmmetav1.Identity{
-		"ProductDeploymentName": obj.Name,
-	}
-
-	digest, err := r.SnapshotWriter.Write(ctx, obj, dir, identity)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to write to the cache: %w", err)
-	}
-
-	obj.Status.LatestSnapshotDigest = digest
-	obj.Status.SnapshotName = snapshotName
 
 	// TODO: Get the repositoryRef from the Project
-	// TODO: Get the commit template from the Project
+	project := projectList.Items[0]
+
+	if project.Spec.Git.CommitTemplate == nil {
+		return ctrl.Result{}, fmt.Errorf("commit template in project cannot be empty")
+	}
 
 	sync := &gitv1alpha1.Sync{
 		ObjectMeta: metav1.ObjectMeta{
@@ -339,11 +290,11 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 				Duration: 1 * time.Minute,
 			},
 			CommitTemplate: gitv1alpha1.CommitTemplate{
-				Name:         "<name>",
-				Email:        "<email>",
-				Message:      "New Product Deployment",
-				TargetBranch: "main",
-				BaseBranch:   "main",
+				Name:         project.Spec.Git.CommitTemplate.Name,
+				Email:        project.Spec.Git.CommitTemplate.Email,
+				Message:      project.Spec.Git.CommitTemplate.Message,
+				TargetBranch: project.Spec.Git.DefaultBranch,
+				BaseBranch:   project.Spec.Git.DefaultBranch,
 			},
 			AutomaticPullRequestCreation: true,
 			SubPath:                      "generators/.",
@@ -351,6 +302,8 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	}
 
 	if err := r.Create(ctx, sync); err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CreateSyncFailedReason, err.Error())
+
 		return ctrl.Result{}, fmt.Errorf("failed to create sync request: %w", err)
 	}
 
@@ -399,4 +352,80 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(description
 		},
 		TargetRole: *targetRole,
 	}, nil
+}
+
+func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator, prodDesc *v1alpha1.ProductDescription, component replicationv1.Component) (*v1alpha1.ProductDeployment, error) {
+	logger := log.FromContext(ctx)
+
+	productDeployment := &v1alpha1.ProductDeployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      prodDesc.Name,
+			Namespace: obj.Namespace,
+		},
+	}
+
+	spec := v1alpha1.ProductDeploymentSpec{}
+	spec.Component = component
+
+	for _, p := range prodDesc.Spec.Pipelines {
+		pipe, err := r.createProductPipeline(*prodDesc, p)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create product pipeline: %w", err)
+		}
+		spec.Pipelines = append(spec.Pipelines, pipe)
+	}
+
+	productDeployment.Spec = spec
+
+	logger.Info("successfully generated product deployment", "productDeployment", klog.KObj(productDeployment))
+
+	return productDeployment, nil
+
+}
+
+func (r *ProductDeploymentGeneratorReconciler) createSnapshot(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator, productDeployment *v1alpha1.ProductDeployment, component replicationv1.Component) (string, error) {
+	serializer := json.NewSerializerWithOptions(json.DefaultMetaFactory, r.Scheme, r.Scheme, json.SerializerOptions{
+		Yaml:   true,
+		Pretty: true,
+	})
+
+	dir, err := os.MkdirTemp("", "product-deployment")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp folder: %w", err)
+	}
+
+	defer os.RemoveAll(dir)
+
+	productDeploymentFile, err := os.Create(filepath.Join(dir, "product-deployment.yaml"))
+	if err != nil {
+		return "", fmt.Errorf("failed to create file: %w", err)
+	}
+
+	defer productDeploymentFile.Close()
+
+	if err := serializer.Encode(productDeployment, productDeploymentFile); err != nil {
+		return "", fmt.Errorf("failed to encode product deployment: %w", err)
+	}
+
+	snapshotName, err := snapshot.GenerateSnapshotName(obj.Name)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate a snapshot name: %w", err)
+	}
+
+	obj.Status.SnapshotName = snapshotName
+
+	identity := ocmmetav1.Identity{
+		ocmv1alpha1.ComponentNameKey:      component.Name,
+		ocmv1alpha1.ComponentVersionKey:   component.Version,
+		v1alpha1.ProductDeploymentNameKey: obj.Name,
+	}
+
+	digest, err := r.SnapshotWriter.Write(ctx, obj, dir, identity)
+	if err != nil {
+		return "", fmt.Errorf("failed to write to the cache: %w", err)
+	}
+
+	obj.Status.LatestSnapshotDigest = digest
+
+	return snapshotName, nil
 }
