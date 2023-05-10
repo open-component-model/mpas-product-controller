@@ -5,6 +5,7 @@
 package v1alpha1
 
 import (
+	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
 	"github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/versions/ocm.software/v3alpha1"
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,9 +33,17 @@ type ProductDeploymentStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
+type ResourceReference struct {
+	// +required
+	v3alpha1.ElementMeta `json:",inline"`
+
+	// +optional
+	ReferencePath []ocmmetav1.Identity `json:"referencePath,omitempty"`
+}
+
 // Localization defines a list of rules which are named versions.
 type Localization struct {
-	Rules v3alpha1.ElementMeta `json:"rules"`
+	Rules ResourceReference `json:"rules"`
 }
 
 // ValuesFile defines a path to a values file containing User configuration.
@@ -44,7 +53,7 @@ type ValuesFile struct {
 
 // Configuration defines a list of rules to follow and an optional values file.
 type Configuration struct {
-	Rules v3alpha1.ElementMeta `json:"rules"`
+	Rules ResourceReference `json:"rules"`
 
 	//+optional
 	ValuesFile ValuesFile `json:"valuesFile,omitempty"`
@@ -58,11 +67,11 @@ type TargetRole struct {
 
 // Pipeline defines a set of Loca
 type Pipeline struct {
-	Name          string               `json:"name"`
-	Resource      v3alpha1.ElementMeta `json:"resource"`
-	Localization  Localization         `json:"localization"`
-	Configuration Configuration        `json:"configuration"`
-	TargetRole    TargetRole           `json:"targetRole"`
+	Name          string            `json:"name"`
+	Resource      ResourceReference `json:"resource"`
+	Localization  Localization      `json:"localization"`
+	Configuration Configuration     `json:"configuration"`
+	TargetRole    TargetRole        `json:"targetRole"`
 }
 
 // GetConditions returns the conditions of the ComponentVersion.

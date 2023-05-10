@@ -42,8 +42,6 @@ spec:
                   optional values file.
                 properties:
                   rules:
-                    description: ElementMeta defines a object that is uniquely identified
-                      by its identity.
                     properties:
                       extraIdentity:
                         additionalProperties:
@@ -79,6 +77,14 @@ spec:
                       name:
                         description: Name is the context unique name of the object.
                         type: string
+                      referencePath:
+                        items:
+                          additionalProperties:
+                            type: string
+                          description: Identity describes the identity of an object.
+                            Only ascii characters are allowed
+                          type: object
+                        type: array
                       version:
                         description: Version is the semver version of the object.
                         type: string
@@ -103,8 +109,6 @@ spec:
                   versions.
                 properties:
                   rules:
-                    description: ElementMeta defines a object that is uniquely identified
-                      by its identity.
                     properties:
                       extraIdentity:
                         additionalProperties:
@@ -140,6 +144,14 @@ spec:
                       name:
                         description: Name is the context unique name of the object.
                         type: string
+                      referencePath:
+                        items:
+                          additionalProperties:
+                            type: string
+                          description: Identity describes the identity of an object.
+                            Only ascii characters are allowed
+                          type: object
+                        type: array
                       version:
                         description: Version is the semver version of the object.
                         type: string
@@ -151,8 +163,6 @@ spec:
                 - rules
                 type: object
               resource:
-                description: ElementMeta defines a object that is uniquely identified
-                  by its identity.
                 properties:
                   extraIdentity:
                     additionalProperties:
@@ -188,6 +198,14 @@ spec:
                   name:
                     description: Name is the context unique name of the object.
                     type: string
+                  referencePath:
+                    items:
+                      additionalProperties:
+                        type: string
+                      description: Identity describes the identity of an object. Only
+                        ascii characters are allowed
+                      type: object
+                    type: array
                   version:
                     description: Version is the semver version of the object.
                     type: string

@@ -30,15 +30,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	"github.com/open-component-model/ocm/pkg/common/compression"
-	"github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc"
-	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
-	"github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/versions/ocm.software/v3alpha1"
-
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
 	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	"github.com/open-component-model/ocm-controller/pkg/snapshot"
+	"github.com/open-component-model/ocm/pkg/common/compression"
+	"github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc"
+	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 
 	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
@@ -334,22 +332,13 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(description
 	return v1alpha1.Pipeline{
 		Name: p.Name,
 		Localization: v1alpha1.Localization{
-			Rules: v3alpha1.ElementMeta{
-				Name:    p.Localization.Name,
-				Version: p.Localization.Version,
-			},
+			Rules: p.Localization,
 		},
 		Configuration: v1alpha1.Configuration{
-			Rules: v3alpha1.ElementMeta{
-				Name:    p.Configuration.Name,
-				Version: p.Configuration.Version,
-			},
+			Rules:      p.Configuration,
 			ValuesFile: v1alpha1.ValuesFile{},
 		},
-		Resource: v3alpha1.ElementMeta{
-			Name:    p.Source.Name,
-			Version: p.Source.Version,
-		},
+		Resource:   p.Source,
 		TargetRole: *targetRole,
 	}, nil
 }

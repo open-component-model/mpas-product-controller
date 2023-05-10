@@ -42,46 +42,102 @@ spec:
                 items:
                   properties:
                     configuration:
-                      description: Ref describes a resource that could be referenced
-                        by a component version.
                       properties:
-                        componentReference:
-                          description: ComponentReference is used to fetch the given
-                            resource if defined instead of the parent component of
-                            this object.
-                          properties:
-                            name:
-                              description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                                TODO: Add other useful fields. apiVersion, kind, uid?'
-                              type: string
+                        extraIdentity:
+                          additionalProperties:
+                            type: string
+                          description: ExtraIdentity is the identity of an object.
+                            An additional label with key "name" ist not allowed
                           type: object
-                          x-kubernetes-map-type: atomic
+                        labels:
+                          description: Labels defines an optional set of additional
+                            labels describing the object.
+                          items:
+                            description: Label is a label that can be set on objects.
+                            properties:
+                              name:
+                                description: Name is the unique name of the label.
+                                type: string
+                              signing:
+                                description: Signing describes whether the label should
+                                  be included into the signature
+                                type: boolean
+                              value:
+                                description: Value is the json/yaml data of the label
+                                x-kubernetes-preserve-unknown-fields: true
+                              version:
+                                description: Version is the optional specification
+                                  version of the attribute value
+                                type: string
+                            required:
+                            - name
+                            - value
+                            type: object
+                          type: array
                         name:
+                          description: Name is the context unique name of the object.
                           type: string
+                        referencePath:
+                          items:
+                            additionalProperties:
+                              type: string
+                            description: Identity describes the identity of an object.
+                              Only ascii characters are allowed
+                            type: object
+                          type: array
                         version:
+                          description: Version is the semver version of the object.
                           type: string
                       required:
                       - name
                       - version
                       type: object
                     localization:
-                      description: Ref describes a resource that could be referenced
-                        by a component version.
                       properties:
-                        componentReference:
-                          description: ComponentReference is used to fetch the given
-                            resource if defined instead of the parent component of
-                            this object.
-                          properties:
-                            name:
-                              description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                                TODO: Add other useful fields. apiVersion, kind, uid?'
-                              type: string
+                        extraIdentity:
+                          additionalProperties:
+                            type: string
+                          description: ExtraIdentity is the identity of an object.
+                            An additional label with key "name" ist not allowed
                           type: object
-                          x-kubernetes-map-type: atomic
+                        labels:
+                          description: Labels defines an optional set of additional
+                            labels describing the object.
+                          items:
+                            description: Label is a label that can be set on objects.
+                            properties:
+                              name:
+                                description: Name is the unique name of the label.
+                                type: string
+                              signing:
+                                description: Signing describes whether the label should
+                                  be included into the signature
+                                type: boolean
+                              value:
+                                description: Value is the json/yaml data of the label
+                                x-kubernetes-preserve-unknown-fields: true
+                              version:
+                                description: Version is the optional specification
+                                  version of the attribute value
+                                type: string
+                            required:
+                            - name
+                            - value
+                            type: object
+                          type: array
                         name:
+                          description: Name is the context unique name of the object.
                           type: string
+                        referencePath:
+                          items:
+                            additionalProperties:
+                              type: string
+                            description: Identity describes the identity of an object.
+                              Only ascii characters are allowed
+                            type: object
+                          type: array
                         version:
+                          description: Version is the semver version of the object.
                           type: string
                       required:
                       - name
@@ -90,23 +146,51 @@ spec:
                     name:
                       type: string
                     source:
-                      description: Ref describes a resource that could be referenced
-                        by a component version.
                       properties:
-                        componentReference:
-                          description: ComponentReference is used to fetch the given
-                            resource if defined instead of the parent component of
-                            this object.
-                          properties:
-                            name:
-                              description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                                TODO: Add other useful fields. apiVersion, kind, uid?'
-                              type: string
+                        extraIdentity:
+                          additionalProperties:
+                            type: string
+                          description: ExtraIdentity is the identity of an object.
+                            An additional label with key "name" ist not allowed
                           type: object
-                          x-kubernetes-map-type: atomic
+                        labels:
+                          description: Labels defines an optional set of additional
+                            labels describing the object.
+                          items:
+                            description: Label is a label that can be set on objects.
+                            properties:
+                              name:
+                                description: Name is the unique name of the label.
+                                type: string
+                              signing:
+                                description: Signing describes whether the label should
+                                  be included into the signature
+                                type: boolean
+                              value:
+                                description: Value is the json/yaml data of the label
+                                x-kubernetes-preserve-unknown-fields: true
+                              version:
+                                description: Version is the optional specification
+                                  version of the attribute value
+                                type: string
+                            required:
+                            - name
+                            - value
+                            type: object
+                          type: array
                         name:
+                          description: Name is the context unique name of the object.
                           type: string
+                        referencePath:
+                          items:
+                            additionalProperties:
+                              type: string
+                            description: Identity describes the identity of an object.
+                              Only ascii characters are allowed
+                            type: object
+                          type: array
                         version:
+                          description: Version is the semver version of the object.
                           type: string
                       required:
                       - name
@@ -115,23 +199,51 @@ spec:
                     targetRoleName:
                       type: string
                     validation:
-                      description: Ref describes a resource that could be referenced
-                        by a component version.
                       properties:
-                        componentReference:
-                          description: ComponentReference is used to fetch the given
-                            resource if defined instead of the parent component of
-                            this object.
-                          properties:
-                            name:
-                              description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                                TODO: Add other useful fields. apiVersion, kind, uid?'
-                              type: string
+                        extraIdentity:
+                          additionalProperties:
+                            type: string
+                          description: ExtraIdentity is the identity of an object.
+                            An additional label with key "name" ist not allowed
                           type: object
-                          x-kubernetes-map-type: atomic
+                        labels:
+                          description: Labels defines an optional set of additional
+                            labels describing the object.
+                          items:
+                            description: Label is a label that can be set on objects.
+                            properties:
+                              name:
+                                description: Name is the unique name of the label.
+                                type: string
+                              signing:
+                                description: Signing describes whether the label should
+                                  be included into the signature
+                                type: boolean
+                              value:
+                                description: Value is the json/yaml data of the label
+                                x-kubernetes-preserve-unknown-fields: true
+                              version:
+                                description: Version is the optional specification
+                                  version of the attribute value
+                                type: string
+                            required:
+                            - name
+                            - value
+                            type: object
+                          type: array
                         name:
+                          description: Name is the context unique name of the object.
                           type: string
+                        referencePath:
+                          items:
+                            additionalProperties:
+                              type: string
+                            description: Identity describes the identity of an object.
+                              Only ascii characters are allowed
+                            type: object
+                          type: array
                         version:
+                          description: Version is the semver version of the object.
                           type: string
                       required:
                       - name

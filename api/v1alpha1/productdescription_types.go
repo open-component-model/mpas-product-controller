@@ -5,7 +5,6 @@
 package v1alpha1
 
 import (
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -29,32 +28,21 @@ type TargetRoles struct {
 }
 
 type ProductDescriptionPipeline struct {
-	Name       string `json:"name"`
-	Source     Ref    `json:"source"`
-	Validation Ref    `json:"validation"`
+	Name       string            `json:"name"`
+	Source     ResourceReference `json:"source"`
+	Validation ResourceReference `json:"validation"`
 
 	//+optional
 	TargetRoleName string `json:"targetRoleName,omitempty"`
 	//+optional
-	Localization Ref `json:"localization,omitempty"`
+	Localization ResourceReference `json:"localization,omitempty"`
 	//+optional
-	Configuration Ref `json:"configuration,omitempty"`
+	Configuration ResourceReference `json:"configuration,omitempty"`
 }
 
 type ProductDescriptionPipelineConfiguration struct {
-	Rules  Ref `json:"rules"`
-	Readme Ref `json:"readme"`
-}
-
-// Ref describes a resource that could be referenced by a component version.
-type Ref struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
-
-	// ComponentReference is used to fetch the given resource if defined instead
-	// of the parent component of this object.
-	//+optional
-	ComponentReference v1.LocalObjectReference `json:"componentReference,omitempty"`
+	Rules  ResourceReference `json:"rules"`
+	Readme ResourceReference `json:"readme"`
 }
 
 //+kubebuilder:object:root=true
