@@ -16,6 +16,7 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
+	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,7 +32,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
-	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	"github.com/open-component-model/ocm-controller/pkg/snapshot"
 	"github.com/open-component-model/ocm/pkg/common/compression"
@@ -295,7 +295,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 				BaseBranch:   project.Spec.Git.DefaultBranch,
 			},
 			AutomaticPullRequestCreation: true,
-			SubPath:                      "generators/.",
+			SubPath:                      "products/.",
 		},
 	}
 
@@ -330,12 +330,10 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(description
 		return v1alpha1.Pipeline{}, fmt.Errorf("failed to find a target role with name %s", p.TargetRoleName)
 	}
 	return v1alpha1.Pipeline{
-		Name: p.Name,
-		Localization: v1alpha1.Localization{
-			Rules: p.Localization,
-		},
+		Name:         p.Name,
+		Localization: p.Localization,
 		Configuration: v1alpha1.Configuration{
-			Rules:      p.Configuration,
+			Rules:      p.Configuration.Rules,
 			ValuesFile: v1alpha1.ValuesFile{},
 		},
 		Resource:   p.Source,
@@ -347,6 +345,10 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx conte
 	logger := log.FromContext(ctx)
 
 	productDeployment := &v1alpha1.ProductDeployment{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       v1alpha1.ProductDeploymentKind,
+			APIVersion: v1alpha1.GroupVersion.String(),
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      prodDesc.Name,
 			Namespace: obj.Namespace,

@@ -12,7 +12,7 @@ import (
 // ProductDeploymentPipelineSpec defines the desired state of ProductDeploymentPipeline
 type ProductDeploymentPipelineSpec struct {
 	Resource      ResourceReference `json:"resource"`
-	Localization  Localization      `json:"localization"`
+	Localization  ResourceReference `json:"localization"`
 	Configuration Configuration     `json:"configuration"`
 	TargetRole    TargetRole        `json:"targetRole"`
 

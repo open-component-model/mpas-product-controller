@@ -13,6 +13,7 @@ import (
 
 const (
 	ProductDeploymentNameKey = "product-deployment-name"
+	ProductDeploymentKind    = "ProductDeployment"
 )
 
 // ProductDeploymentSpec defines the desired state of ProductDeployment.
@@ -41,11 +42,6 @@ type ResourceReference struct {
 	ReferencePath []ocmmetav1.Identity `json:"referencePath,omitempty"`
 }
 
-// Localization defines a list of rules which are named versions.
-type Localization struct {
-	Rules ResourceReference `json:"rules"`
-}
-
 // ValuesFile defines a path to a values file containing User configuration.
 type ValuesFile struct {
 	Path string `json:"path"`
@@ -69,7 +65,7 @@ type TargetRole struct {
 type Pipeline struct {
 	Name          string            `json:"name"`
 	Resource      ResourceReference `json:"resource"`
-	Localization  Localization      `json:"localization"`
+	Localization  ResourceReference `json:"localization"`
 	Configuration Configuration     `json:"configuration"`
 	TargetRole    TargetRole        `json:"targetRole"`
 }

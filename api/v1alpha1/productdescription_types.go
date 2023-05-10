@@ -37,7 +37,12 @@ type ProductDescriptionPipeline struct {
 	//+optional
 	Localization ResourceReference `json:"localization,omitempty"`
 	//+optional
-	Configuration ResourceReference `json:"configuration,omitempty"`
+	Configuration DescriptionConfiguration `json:"configuration,omitempty"`
+}
+
+type DescriptionConfiguration struct {
+	Rules  ResourceReference `json:"rules"`
+	Readme ResourceReference `json:"readme"`
 }
 
 type ProductDescriptionPipelineConfiguration struct {
