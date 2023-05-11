@@ -104,6 +104,8 @@ spec:
                 required:
                 - rules
                 type: object
+              interval:
+                type: string
               localization:
                 properties:
                   extraIdentity:
@@ -280,6 +282,7 @@ spec:
                 type: object
             required:
             - configuration
+            - interval
             - localization
             - resource
             - targetRole

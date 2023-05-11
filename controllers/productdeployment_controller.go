@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
@@ -89,6 +90,7 @@ func (r *ProductDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		// If not reconciling or stalled than mark Ready=True
 		if !conditions.IsReconciling(obj) &&
 			!conditions.IsStalled(obj) &&
+			obj.IsDone() &&
 			err == nil {
 			conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
 		}
@@ -103,18 +105,52 @@ func (r *ProductDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}()
 
+	// update the total number of pipelines this object needs to create and requeue.
+	if obj.Status.Total == 0 {
+		obj.Status.Total = len(obj.Spec.Pipelines)
+
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	if obj.Status.Total == obj.Status.Active {
+		logger.Info("all pipeline objects are already running, nothing to do...")
+		return ctrl.Result{}, nil
+	}
+
 	// Remove any stale Ready condition, most likely False, set above. Its value
 	// is derived from the overall result of the reconciliation in the deferred
 	// block at the very end.
 	conditions.Delete(obj, meta.ReadyCondition)
 
+	// TODO: Figure out how to mark it as ready once all its pipeline objects are finished.
+	// The owner should reconcile if it's updated by one of its children. But shouldn't be marked as done
+	// until Success+Fail == Total.
+	// Added IsDone. That might be enough to track progress.
+	// Also need a way to requeue this object for further processing that is based on a ping instead of a requeue after.
 	return r.reconcile(ctx, obj)
 }
 
-func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alpha1.ProductDeployment) (ctrl.Result, error) {
+func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alpha1.ProductDeployment) (result ctrl.Result, err error) {
+	// TODO: if the reconciliation failed, we have to delete ALL created objects, otherwise they will mess up
+	// the success / failed count of the parent object.
 	logger := log.FromContext(ctx)
 
 	logger.Info("preparing to create pipeline objects")
+
+	var createdSoFar []*v1alpha1.ProductDeploymentPipeline
+
+	defer func() {
+		if err != nil {
+			logger.V(4).Info("pipeline creation failed, cleaning up all potentially created pipelines so far")
+			for _, pb := range createdSoFar {
+				if cerr := r.Delete(ctx, pb); cerr != nil {
+					logger.Error(err, "failed to cleanup pipeline item %s: %w", pb.Name, cerr)
+				}
+			}
+		}
+	}()
+
+	active := 0
 	// Create all the pipeline objects.
 	for _, pipeline := range obj.Spec.Pipelines {
 		pobj := &v1alpha1.ProductDeploymentPipeline{
@@ -127,6 +163,7 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 				Localization:  pipeline.Localization,
 				Configuration: pipeline.Configuration,
 				TargetRole:    pipeline.TargetRole,
+				Interval:      metav1.Duration{Duration: 10 * time.Second},
 			},
 		}
 
@@ -139,8 +176,11 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 		}
 
 		logger.V(4).Info("pipeline object successfully created", "name", pobj.Name)
+		createdSoFar = append(createdSoFar, pobj)
+		active++
 	}
 
+	obj.Status.Active = active
 	logger.Info("all pipeline objects successfully created")
 
 	return ctrl.Result{}, nil

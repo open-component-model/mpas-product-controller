@@ -32,6 +32,24 @@ type ProductDeploymentStatus struct {
 	// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
 	// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// The number of product pipeline objects that have been created altogether.
+	// Once Succeeded + Failed reach this number, the product deployment is considered done.
+	// +optional
+	Total int `json:"total,omitempty"`
+
+	// The number of pipeline objects which reached phase Succeeded.
+	// +optional
+	Succeeded int `json:"succeeded,omitempty"`
+
+	// The number of pipeline objects which reached phase Failed.
+	// +optional
+	Failed int `json:"failed,omitempty"`
+
+	// TODO: Maybe rename this to created...
+	// Active defines the number of pipeline objects that have been successfully created.
+	// +optional
+	Active int `json:"active,omitempty"`
 }
 
 type ResourceReference struct {
@@ -68,6 +86,21 @@ type Pipeline struct {
 	Localization  ResourceReference `json:"localization"`
 	Configuration Configuration     `json:"configuration"`
 	TargetRole    TargetRole        `json:"targetRole"`
+}
+
+// IsDone returns if this pipeline object has finished running all of its pipeline deployments.
+func (in *ProductDeployment) IsDone() bool {
+	// if we don't have any jobs running yet, we aren't done.
+	if in.Status.Total == 0 {
+		return false
+	}
+
+	return in.Status.Succeeded+in.Status.Failed == in.Status.Total
+}
+
+// IsFailed returns if the objects has any failed runs.
+func (in *ProductDeployment) IsFailed() bool {
+	return in.Status.Failed > 0
 }
 
 // GetConditions returns the conditions of the ComponentVersion.
