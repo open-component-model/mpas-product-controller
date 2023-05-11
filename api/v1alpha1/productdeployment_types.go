@@ -33,23 +33,19 @@ type ProductDeploymentStatus struct {
 	// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// The number of product pipeline objects that have been created altogether.
-	// Once Succeeded + Failed reach this number, the product deployment is considered done.
+	// ActivePipelines has all the pipelines which are all still running.
 	// +optional
-	Total int `json:"total,omitempty"`
+	ActivePipelines []string `json:"activePipelines,omitempty"`
 
-	// The number of pipeline objects which reached phase Succeeded.
-	// +optional
-	Succeeded int `json:"succeeded,omitempty"`
+	// TODO: Maybe this isn't needed because all the active pipeline will contain the pipelines that have already been created.
+	//// CreatedPipelines contains all the pipeline objects which have already been created.
+	//// +optional
+	//CreatedPipelines map[string]struct{} `json:"createdPipelines,omitempty"`
+}
 
-	// The number of pipeline objects which reached phase Failed.
-	// +optional
-	Failed int `json:"failed,omitempty"`
-
-	// TODO: Maybe rename this to created...
-	// Active defines the number of pipeline objects that have been successfully created.
-	// +optional
-	Active int `json:"active,omitempty"`
+// IsDone returns if the deployment has finished running all pipelines.
+func (in *ProductDeployment) IsDone() bool {
+	return len(in.Status.ActivePipelines) == 0
 }
 
 type ResourceReference struct {
@@ -86,21 +82,6 @@ type Pipeline struct {
 	Localization  ResourceReference `json:"localization"`
 	Configuration Configuration     `json:"configuration"`
 	TargetRole    TargetRole        `json:"targetRole"`
-}
-
-// IsDone returns if this pipeline object has finished running all of its pipeline deployments.
-func (in *ProductDeployment) IsDone() bool {
-	// if we don't have any jobs running yet, we aren't done.
-	if in.Status.Total == 0 {
-		return false
-	}
-
-	return in.Status.Succeeded+in.Status.Failed == in.Status.Total
-}
-
-// IsFailed returns if the objects has any failed runs.
-func (in *ProductDeployment) IsFailed() bool {
-	return in.Status.Failed > 0
 }
 
 // GetConditions returns the conditions of the ComponentVersion.

@@ -308,10 +308,12 @@ spec:
           status:
             description: ProductDeploymentStatus defines the observed state of ProductDeployment.
             properties:
-              active:
-                description: Active defines the number of pipeline objects that have
-                  been successfully created.
-                type: integer
+              activePipelines:
+                description: ActivePipelines has all the pipelines which are all still
+                  running.
+                items:
+                  type: string
+                type: array
               conditions:
                 items:
                   description: "Condition contains details for one aspect of the current
@@ -380,20 +382,9 @@ spec:
                   - type
                   type: object
                 type: array
-              failed:
-                description: The number of pipeline objects which reached phase Failed.
-                type: integer
               observedGeneration:
                 description: ObservedGeneration is the last reconciled generation.
                 format: int64
-                type: integer
-              succeeded:
-                description: The number of pipeline objects which reached phase Succeeded.
-                type: integer
-              total:
-                description: The number of product pipeline objects that have been
-                  created altogether. Once Succeeded + Failed reach this number, the
-                  product deployment is considered done.
                 type: integer
             type: object
         type: object

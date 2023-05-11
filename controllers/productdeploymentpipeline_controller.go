@@ -7,6 +7,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
@@ -63,10 +64,8 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, fmt.Errorf("failed to find the owner: %w", err)
 	}
 
-	if owner.Status.Active != owner.Status.Total {
-		logger.Info("owner isn't ready with creating all the pipelines yet")
-		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
-	}
+	// TODO: REMOVE THIS!!! THIS IS FOR DEMO PURPOSES!!!!!!!
+	time.Sleep(10 * time.Second)
 
 	// TODO: Do this in a defer so the state of the owner is always updated if this pipeline fails.
 	// If the pipeline fails, it shouldn't increase the failed count again.
@@ -77,10 +76,6 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, fmt.Errorf("failed to patch pipeline object '%s': %w", obj.Name, err)
 	}
 
-	if err := r.increaseOwnerSuccess(ctx, owner); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to update owner object '%s', try again.. %w", owner.Name, err)
-	}
-
 	return ctrl.Result{}, nil
 }
 
@@ -89,23 +84,4 @@ func (r *ProductDeploymentPipelineReconciler) SetupWithManager(mgr ctrl.Manager)
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&mpasv1alpha1.ProductDeploymentPipeline{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Complete(r)
-}
-
-func (r *ProductDeploymentPipelineReconciler) increaseOwnerSuccess(ctx context.Context, owner *mpasv1alpha1.ProductDeployment) error {
-	// refresh owner state
-	if err := r.Get(ctx, types.NamespacedName{
-		Name:      owner.Name,
-		Namespace: owner.Namespace,
-	}, owner); err != nil {
-		return fmt.Errorf("failed to find the owner: %w", err)
-	}
-
-	patcher := patch.NewSerialPatcher(owner, r.Client)
-
-	owner.Status.Succeeded++
-	if err := patcher.Patch(ctx, owner); err != nil {
-		return fmt.Errorf("failed to patch owner object '%s': %w", owner.Name, err)
-	}
-
-	return nil
 }
