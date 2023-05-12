@@ -27,8 +27,8 @@ type FakeKubeClientOption func(testEnv *testEnv)
 
 // WithAddToScheme adds the scheme
 func WithAddToScheme(addToScheme func(s *runtime.Scheme) error) FakeKubeClientOption {
-	return func(testEnv *testEnv) {
-		if err := addToScheme(testEnv.scheme); err != nil {
+	return func(env *testEnv) {
+		if err := addToScheme(env.scheme); err != nil {
 			panic(err)
 		}
 	}
@@ -36,8 +36,8 @@ func WithAddToScheme(addToScheme func(s *runtime.Scheme) error) FakeKubeClientOp
 
 // WithObjects provides an option to set objects for the fake client.
 func WithObjets(obj ...client.Object) FakeKubeClientOption {
-	return func(testEnv *testEnv) {
-		testEnv.obj = obj
+	return func(env *testEnv) {
+		env.obj = obj
 	}
 }
 
@@ -46,7 +46,10 @@ func (t *testEnv) FakeKubeClient(opts ...FakeKubeClientOption) client.Client {
 	for _, o := range opts {
 		o(t)
 	}
-	return fake.NewClientBuilder().WithScheme(t.scheme).WithObjects(t.obj...).Build()
+
+	return fake.NewClientBuilder().WithScheme(t.scheme).WithObjects(t.obj...).WithIndex(&v1alpha1.ProductDeploymentPipeline{}, pipelineOwnerKey, func(obj client.Object) []string {
+		return []string{obj.GetName()}
+	}).Build()
 }
 
 var env *testEnv
