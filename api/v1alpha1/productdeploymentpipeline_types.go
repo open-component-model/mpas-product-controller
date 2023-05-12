@@ -5,19 +5,20 @@
 package v1alpha1
 
 import (
-	"time"
-
 	"github.com/fluxcd/pkg/apis/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // ProductDeploymentPipelineSpec defines the desired state of ProductDeploymentPipeline
 type ProductDeploymentPipelineSpec struct {
-	Interval      metav1.Duration   `json:"interval"`
-	Resource      ResourceReference `json:"resource"`
-	Localization  ResourceReference `json:"localization"`
-	Configuration Configuration     `json:"configuration"`
-	TargetRole    TargetRole        `json:"targetRole"`
+	// +required
+	Resource ResourceReference `json:"resource"`
+	// +required
+	Localization ResourceReference `json:"localization"`
+	// +required
+	Configuration Configuration `json:"configuration"`
+	// +required
+	TargetRole TargetRole `json:"targetRole"`
 
 	//+optional
 	TargetRef meta.NamespacedObjectReference `json:"targetRef"`
@@ -33,10 +34,6 @@ type ProductDeploymentPipelineStatus struct {
 	// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
 	// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-}
-
-func (in ProductDeploymentPipeline) GetRequeueAfter() time.Duration {
-	return in.Spec.Interval.Duration
 }
 
 // GetConditions returns the conditions of the ComponentVersion.

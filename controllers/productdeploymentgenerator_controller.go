@@ -46,9 +46,6 @@ import (
 const (
 	// ProductDescriptionType defines the type of the ProductDescription resource in the component version.
 	ProductDescriptionType = "productdescription.mpas.ocm.software"
-
-	// MaximumNumberOfConcurrentPipelineRuns defines how many concurrent running pipelines there can be.
-	MaximumNumberOfConcurrentPipelineRuns = 10
 )
 
 // ProductDeploymentGeneratorReconciler reconciles a ProductDeploymentGenerator object
@@ -58,6 +55,13 @@ type ProductDeploymentGeneratorReconciler struct {
 
 	OCMClient      ocm.Contract
 	SnapshotWriter snapshot.Writer
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *ProductDeploymentGeneratorReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&v1alpha1.ProductDeploymentGenerator{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Complete(r)
 }
 
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeploymentgenerators,verbs=get;list;watch;create;update;patch;delete
@@ -306,13 +310,6 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	}
 
 	return ctrl.Result{}, nil
-}
-
-// SetupWithManager sets up the controller with the Manager.
-func (r *ProductDeploymentGeneratorReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.ProductDeploymentGenerator{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		Complete(r)
 }
 
 // createProductPipeline takes a pipeline description and builds up all the Kubernetes objects that are needed

@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
@@ -30,6 +29,30 @@ import (
 type ProductDeploymentReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *ProductDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1alpha1.ProductDeploymentPipeline{}, pipelineOwnerKey, func(rawObj client.Object) []string {
+		job := rawObj.(*v1alpha1.ProductDeploymentPipeline)
+		owner := metav1.GetControllerOf(job)
+		if owner == nil {
+			return nil
+		}
+
+		if owner.APIVersion != v1alpha1.GroupVersion.String() || owner.Kind != v1alpha1.ProductDeploymentKind {
+			return nil
+		}
+
+		return []string{owner.Name}
+	}); err != nil {
+		return err
+	}
+
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&v1alpha1.ProductDeployment{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Owns(&v1alpha1.ProductDeploymentPipeline{}).
+		Complete(r)
 }
 
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeployments,verbs=get;list;watch;create;update;patch;delete
@@ -87,7 +110,7 @@ func (r *ProductDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		// If not reconciling or stalled than mark Ready=True
 		if !conditions.IsReconciling(obj) &&
 			!conditions.IsStalled(obj) &&
-			obj.IsDone() &&
+			obj.IsComplete() &&
 			err == nil {
 			conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
 		}
@@ -149,7 +172,6 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 				Localization:  pipeline.Localization,
 				Configuration: pipeline.Configuration,
 				TargetRole:    pipeline.TargetRole,
-				Interval:      metav1.Duration{Duration: 10 * time.Second},
 			},
 		}
 
@@ -175,27 +197,3 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 const (
 	pipelineOwnerKey = ".metadata.controller"
 )
-
-// SetupWithManager sets up the controller with the Manager.
-func (r *ProductDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1alpha1.ProductDeploymentPipeline{}, pipelineOwnerKey, func(rawObj client.Object) []string {
-		job := rawObj.(*v1alpha1.ProductDeploymentPipeline)
-		owner := metav1.GetControllerOf(job)
-		if owner == nil {
-			return nil
-		}
-
-		if owner.APIVersion != v1alpha1.GroupVersion.String() || owner.Kind != v1alpha1.ProductDeploymentKind {
-			return nil
-		}
-
-		return []string{owner.Name}
-	}); err != nil {
-		return err
-	}
-
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.ProductDeployment{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		Owns(&v1alpha1.ProductDeploymentPipeline{}).
-		Complete(r)
-}

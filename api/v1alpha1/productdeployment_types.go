@@ -18,8 +18,10 @@ const (
 
 // ProductDeploymentSpec defines the desired state of ProductDeployment.
 type ProductDeploymentSpec struct {
+	// +required
 	Component replicationv1.Component `json:"component"`
-	Pipelines []Pipeline              `json:"pipelines"`
+	// +required
+	Pipelines []Pipeline `json:"pipelines"`
 }
 
 // ProductDeploymentStatus defines the observed state of ProductDeployment.
@@ -38,8 +40,8 @@ type ProductDeploymentStatus struct {
 	ActivePipelines []string `json:"activePipelines,omitempty"`
 }
 
-// IsDone returns if the deployment has finished running all pipelines.
-func (in *ProductDeployment) IsDone() bool {
+// IsComplete returns if the deployment has finished running all pipelines.
+func (in *ProductDeployment) IsComplete() bool {
 	return len(in.Status.ActivePipelines) == 0
 }
 

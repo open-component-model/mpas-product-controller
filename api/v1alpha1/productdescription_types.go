@@ -10,26 +10,32 @@ import (
 
 // ProductDescriptionSpec defines the desired state of ProductDescription
 type ProductDescriptionSpec struct {
-	Description string                       `json:"description"`
-	Pipelines   []ProductDescriptionPipeline `json:"pipelines"`
+	// +required
+	Description string `json:"description"`
+	// +required
+	Pipelines []ProductDescriptionPipeline `json:"pipelines"`
 
 	//+optional
 	TargetRoles []TargetRoles `json:"targetRoles,omitempty"`
 }
 
 // ProductDescriptionStatus defines the observed state of ProductDescription
-type ProductDescriptionStatus struct {
-}
+type ProductDescriptionStatus struct{}
 
 // TargetRoles defines a target role with a name.
 type TargetRoles struct {
+	// +required
 	Name       string `json:"name"`
 	TargetRole `json:",inline"`
 }
 
+// ProductDescriptionPipeline defines the details for a pipeline item.
 type ProductDescriptionPipeline struct {
-	Name       string            `json:"name"`
-	Source     ResourceReference `json:"source"`
+	// +required
+	Name string `json:"name"`
+	// +required
+	Source ResourceReference `json:"source"`
+	// +required
 	Validation ResourceReference `json:"validation"`
 
 	//+optional
@@ -40,13 +46,11 @@ type ProductDescriptionPipeline struct {
 	Configuration DescriptionConfiguration `json:"configuration,omitempty"`
 }
 
+// DescriptionConfiguration contains details one parsing configuration items in a project description.
 type DescriptionConfiguration struct {
-	Rules  ResourceReference `json:"rules"`
-	Readme ResourceReference `json:"readme"`
-}
-
-type ProductDescriptionPipelineConfiguration struct {
-	Rules  ResourceReference `json:"rules"`
+	// +required
+	Rules ResourceReference `json:"rules"`
+	// +required
 	Readme ResourceReference `json:"readme"`
 }
 

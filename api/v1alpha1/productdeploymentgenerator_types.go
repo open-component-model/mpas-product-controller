@@ -30,6 +30,7 @@ type ProductDeploymentGeneratorSpec struct {
 
 	// ServiceAccountName is used to access ocm component repositories. No other auth option is defined.
 	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account
+	// +required
 	ServiceAccountName string `json:"serviceAccountName"`
 }
 

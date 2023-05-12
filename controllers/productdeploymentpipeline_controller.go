@@ -30,6 +30,13 @@ type ProductDeploymentPipelineReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+// SetupWithManager sets up the controller with the Manager.
+func (r *ProductDeploymentPipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&mpasv1alpha1.ProductDeploymentPipeline{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Complete(r)
+}
+
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeploymentpipelines,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeploymentpipelines/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeploymentpipelines/finalizers,verbs=update
@@ -75,11 +82,4 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 	}
 
 	return ctrl.Result{}, nil
-}
-
-// SetupWithManager sets up the controller with the Manager.
-func (r *ProductDeploymentPipelineReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&mpasv1alpha1.ProductDeploymentPipeline{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		Complete(r)
 }

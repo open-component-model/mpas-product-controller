@@ -40,8 +40,12 @@ spec:
                 type: string
               pipelines:
                 items:
+                  description: ProductDescriptionPipeline defines the details for
+                    a pipeline item.
                   properties:
                     configuration:
+                      description: DescriptionConfiguration contains details one parsing
+                        configuration items in a project description.
                       properties:
                         readme:
                           properties:
