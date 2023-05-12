@@ -36,11 +36,6 @@ type ProductDeploymentStatus struct {
 	// ActivePipelines has all the pipelines which are all still running.
 	// +optional
 	ActivePipelines []string `json:"activePipelines,omitempty"`
-
-	// TODO: Maybe this isn't needed because all the active pipeline will contain the pipelines that have already been created.
-	//// CreatedPipelines contains all the pipeline objects which have already been created.
-	//// +optional
-	//CreatedPipelines map[string]struct{} `json:"createdPipelines,omitempty"`
 }
 
 // IsDone returns if the deployment has finished running all pipelines.

@@ -67,8 +67,6 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 	// TODO: REMOVE THIS!!! THIS IS FOR DEMO PURPOSES!!!!!!!
 	time.Sleep(10 * time.Second)
 
-	// TODO: Do this in a defer so the state of the owner is always updated if this pipeline fails.
-	// If the pipeline fails, it shouldn't increase the failed count again.
 	objPatcher := patch.NewSerialPatcher(obj, r.Client)
 	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
 

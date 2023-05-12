@@ -111,16 +111,8 @@ func (r *ProductDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 }
 
 func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alpha1.ProductDeployment) (result ctrl.Result, err error) {
-	// TODO: if the reconciliation failed, we have to delete ALL created objects, otherwise they will mess up
-	// the success / failed count of the parent object.
 	logger := log.FromContext(ctx)
 	logger.Info("preparing to create pipeline objects")
-
-	// list all owned pipelines
-	// get their statuses
-	// update the active list
-	// obj.Status.Active = nil -> always clear the list and reconstruct it
-	// deal with existing pipeline items (failed ones and successful ones), then create the rest
 
 	alreadyCreatedPipelines := make(map[string]struct{})
 
@@ -131,10 +123,8 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 
 	logger.Info("retrieved number of existing pipeline items", "items", len(existingPipelines.Items))
 
-	// Basic, keeping track of the jobs.
 	obj.Status.ActivePipelines = nil
 	for _, ep := range existingPipelines.Items {
-		// save what we already created.
 		alreadyCreatedPipelines[ep.Name] = struct{}{}
 
 		if !conditions.IsTrue(&ep, meta.ReadyCondition) {
