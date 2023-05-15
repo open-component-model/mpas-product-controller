@@ -5,56 +5,53 @@
 package v1alpha1
 
 import (
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // ProductDescriptionSpec defines the desired state of ProductDescription
 type ProductDescriptionSpec struct {
-	Description string                       `json:"description"`
-	Pipelines   []ProductDescriptionPipeline `json:"pipelines"`
+	// +required
+	Description string `json:"description"`
+	// +required
+	Pipelines []ProductDescriptionPipeline `json:"pipelines"`
 
 	//+optional
 	TargetRoles []TargetRoles `json:"targetRoles,omitempty"`
 }
 
 // ProductDescriptionStatus defines the observed state of ProductDescription
-type ProductDescriptionStatus struct {
-}
+type ProductDescriptionStatus struct{}
 
 // TargetRoles defines a target role with a name.
 type TargetRoles struct {
+	// +required
 	Name       string `json:"name"`
 	TargetRole `json:",inline"`
 }
 
+// ProductDescriptionPipeline defines the details for a pipeline item.
 type ProductDescriptionPipeline struct {
-	Name       string `json:"name"`
-	Source     Ref    `json:"source"`
-	Validation Ref    `json:"validation"`
+	// +required
+	Name string `json:"name"`
+	// +required
+	Source ResourceReference `json:"source"`
+	// +required
+	Validation ResourceReference `json:"validation"`
 
 	//+optional
 	TargetRoleName string `json:"targetRoleName,omitempty"`
 	//+optional
-	Localization Ref `json:"localization,omitempty"`
+	Localization ResourceReference `json:"localization,omitempty"`
 	//+optional
-	Configuration Ref `json:"configuration,omitempty"`
+	Configuration DescriptionConfiguration `json:"configuration,omitempty"`
 }
 
-type ProductDescriptionPipelineConfiguration struct {
-	Rules  Ref `json:"rules"`
-	Readme Ref `json:"readme"`
-}
-
-// Ref describes a resource that could be referenced by a component version.
-type Ref struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
-
-	// ComponentReference is used to fetch the given resource if defined instead
-	// of the parent component of this object.
-	//+optional
-	ComponentReference v1.LocalObjectReference `json:"componentReference,omitempty"`
+// DescriptionConfiguration contains details one parsing configuration items in a project description.
+type DescriptionConfiguration struct {
+	// +required
+	Rules ResourceReference `json:"rules"`
+	// +required
+	Readme ResourceReference `json:"readme"`
 }
 
 //+kubebuilder:object:root=true

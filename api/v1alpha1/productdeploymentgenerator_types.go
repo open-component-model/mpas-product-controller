@@ -11,11 +11,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// RepositoryRef represents the name of a repository.
-type RepositoryRef struct {
-	Name string `json:"name"`
-}
-
 // ProductDeploymentGeneratorSpec defines the desired state of ProductDeploymentGenerator
 type ProductDeploymentGeneratorSpec struct {
 	// Interval is the reconciliation interval, i.e. at what interval shall a reconciliation happen.
@@ -26,10 +21,11 @@ type ProductDeploymentGeneratorSpec struct {
 	SubscriptionRef meta.NamespacedObjectReference `json:"subscriptionRef"`
 
 	//+optional
-	RepositoryRef *RepositoryRef `json:"repositoryRef,omitempty"`
+	RepositoryRef *meta.LocalObjectReference `json:"repositoryRef,omitempty"`
 
 	// ServiceAccountName is used to access ocm component repositories. No other auth option is defined.
 	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account
+	// +required
 	ServiceAccountName string `json:"serviceAccountName"`
 }
 
@@ -43,6 +39,22 @@ type ProductDeploymentGeneratorStatus struct {
 	// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
 	// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// +optional
+	LatestSnapshotDigest string `json:"latestSnapshotDigest,omitempty"`
+
+	// +optional
+	SnapshotName string `json:"snapshotName,omitempty"`
+}
+
+// GetSnapshotDigest returns the latest snapshot digest for the localization
+func (in ProductDeploymentGenerator) GetSnapshotDigest() string {
+	return in.Status.LatestSnapshotDigest
+}
+
+// GetSnapshotName returns the key for the snapshot produced by the Localization
+func (in ProductDeploymentGenerator) GetSnapshotName() string {
+	return in.Status.SnapshotName
 }
 
 // GetConditions returns the conditions of the ComponentVersion.

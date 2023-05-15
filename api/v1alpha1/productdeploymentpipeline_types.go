@@ -7,16 +7,18 @@ package v1alpha1
 import (
 	"github.com/fluxcd/pkg/apis/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/versions/ocm.software/v3alpha1"
 )
 
 // ProductDeploymentPipelineSpec defines the desired state of ProductDeploymentPipeline
 type ProductDeploymentPipelineSpec struct {
-	Resource      v3alpha1.ElementMeta `json:"resource"`
-	Localization  Localization         `json:"localization"`
-	Configuration Configuration        `json:"configuration"`
-	TargetRole    TargetRole           `json:"targetRole"`
+	// +required
+	Resource ResourceReference `json:"resource"`
+	// +required
+	Localization ResourceReference `json:"localization"`
+	// +required
+	Configuration Configuration `json:"configuration"`
+	// +required
+	TargetRole TargetRole `json:"targetRole"`
 
 	//+optional
 	TargetRef meta.NamespacedObjectReference `json:"targetRef"`

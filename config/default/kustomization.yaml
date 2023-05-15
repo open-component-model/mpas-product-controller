@@ -1,5 +1,5 @@
 # Adds namespace to all resources.
-namespace: ocm-system
+namespace: mpas-system
 
 resources:
 - ../crd

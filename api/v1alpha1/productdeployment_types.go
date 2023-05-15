@@ -5,15 +5,23 @@
 package v1alpha1
 
 import (
+	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
 	"github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/versions/ocm.software/v3alpha1"
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	ProductDeploymentNameKey = "product-deployment-name"
+	ProductDeploymentKind    = "ProductDeployment"
+)
+
 // ProductDeploymentSpec defines the desired state of ProductDeployment.
 type ProductDeploymentSpec struct {
+	// +required
 	Component replicationv1.Component `json:"component"`
-	Pipelines []Pipeline              `json:"pipelines"`
+	// +required
+	Pipelines []Pipeline `json:"pipelines"`
 }
 
 // ProductDeploymentStatus defines the observed state of ProductDeployment.
@@ -26,11 +34,23 @@ type ProductDeploymentStatus struct {
 	// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
 	// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// ActivePipelines has all the pipelines which are all still running.
+	// +optional
+	ActivePipelines []string `json:"activePipelines,omitempty"`
 }
 
-// Localization defines a list of rules which are named versions.
-type Localization struct {
-	Rules v3alpha1.ElementMeta `json:"rules"`
+// IsComplete returns if the deployment has finished running all pipelines.
+func (in *ProductDeployment) IsComplete() bool {
+	return len(in.Status.ActivePipelines) == 0
+}
+
+type ResourceReference struct {
+	// +required
+	v3alpha1.ElementMeta `json:",inline"`
+
+	// +optional
+	ReferencePath []ocmmetav1.Identity `json:"referencePath,omitempty"`
 }
 
 // ValuesFile defines a path to a values file containing User configuration.
@@ -40,7 +60,7 @@ type ValuesFile struct {
 
 // Configuration defines a list of rules to follow and an optional values file.
 type Configuration struct {
-	Rules v3alpha1.ElementMeta `json:"rules"`
+	Rules ResourceReference `json:"rules"`
 
 	//+optional
 	ValuesFile ValuesFile `json:"valuesFile,omitempty"`
@@ -52,13 +72,13 @@ type TargetRole struct {
 	Selector metav1.LabelSelector `json:"selector"`
 }
 
-// Pipeline defines a set of steps that can be performed in order to deploy a product.
+// Pipeline defines a set of Loca
 type Pipeline struct {
-	Name          string               `json:"name"`
-	Resource      v3alpha1.ElementMeta `json:"resource"`
-	Localization  Localization         `json:"localization"`
-	Configuration Configuration        `json:"configuration"`
-	TargetRole    TargetRole           `json:"targetRole"`
+	Name          string            `json:"name"`
+	Resource      ResourceReference `json:"resource"`
+	Localization  ResourceReference `json:"localization"`
+	Configuration Configuration     `json:"configuration"`
+	TargetRole    TargetRole        `json:"targetRole"`
 }
 
 // GetConditions returns the conditions of the ComponentVersion.

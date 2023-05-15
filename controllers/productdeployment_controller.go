@@ -31,6 +31,30 @@ type ProductDeploymentReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+// SetupWithManager sets up the controller with the Manager.
+func (r *ProductDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1alpha1.ProductDeploymentPipeline{}, pipelineOwnerKey, func(rawObj client.Object) []string {
+		job := rawObj.(*v1alpha1.ProductDeploymentPipeline)
+		owner := metav1.GetControllerOf(job)
+		if owner == nil {
+			return nil
+		}
+
+		if owner.APIVersion != v1alpha1.GroupVersion.String() || owner.Kind != v1alpha1.ProductDeploymentKind {
+			return nil
+		}
+
+		return []string{owner.Name}
+	}); err != nil {
+		return err
+	}
+
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&v1alpha1.ProductDeployment{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Owns(&v1alpha1.ProductDeploymentPipeline{}).
+		Complete(r)
+}
+
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeployments/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeployments/finalizers,verbs=update
@@ -50,10 +74,7 @@ func (r *ProductDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
-	var patchHelper *patch.Helper
-	if patchHelper, err = patch.NewHelper(obj, r.Client); err != nil {
-		return
-	}
+	patchHelper := patch.NewSerialPatcher(obj, r.Client)
 
 	// Always attempt to patch the object and status after each reconciliation.
 	defer func() {
@@ -89,6 +110,7 @@ func (r *ProductDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		// If not reconciling or stalled than mark Ready=True
 		if !conditions.IsReconciling(obj) &&
 			!conditions.IsStalled(obj) &&
+			obj.IsComplete() &&
 			err == nil {
 			conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
 		}
@@ -111,12 +133,35 @@ func (r *ProductDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	return r.reconcile(ctx, obj)
 }
 
-func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alpha1.ProductDeployment) (ctrl.Result, error) {
+func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alpha1.ProductDeployment) (result ctrl.Result, err error) {
 	logger := log.FromContext(ctx)
-
 	logger.Info("preparing to create pipeline objects")
-	// Create all the pipeline objects.
+
+	alreadyCreatedPipelines := make(map[string]struct{})
+
+	existingPipelines := &v1alpha1.ProductDeploymentPipelineList{}
+	if err := r.List(ctx, existingPipelines, client.InNamespace(obj.Namespace), client.MatchingFields{pipelineOwnerKey: obj.Name}); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to list owned pipelines: %w", err)
+	}
+
+	logger.Info("retrieved number of existing pipeline items", "items", len(existingPipelines.Items))
+
+	obj.Status.ActivePipelines = nil
+	for _, ep := range existingPipelines.Items {
+		alreadyCreatedPipelines[ep.Name] = struct{}{}
+
+		if !conditions.IsTrue(&ep, meta.ReadyCondition) {
+			obj.Status.ActivePipelines = append(obj.Status.ActivePipelines, ep.Name)
+		}
+	}
+
+	// Done handling existing items, now create the rest.
 	for _, pipeline := range obj.Spec.Pipelines {
+		if _, ok := alreadyCreatedPipelines[pipeline.Name]; ok {
+			// already created, skip
+			continue
+		}
+
 		pobj := &v1alpha1.ProductDeploymentPipeline{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      pipeline.Name,
@@ -130,7 +175,7 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 			},
 		}
 
-		if err := controllerutil.SetOwnerReference(obj, pobj, r.Scheme); err != nil {
+		if err := controllerutil.SetControllerReference(obj, pobj, r.Scheme); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to set owner reference: %w", err)
 		}
 
@@ -138,17 +183,17 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 			return ctrl.Result{}, fmt.Errorf("failed to create pipeline object: %w", err)
 		}
 
+		obj.Status.ActivePipelines = append(obj.Status.ActivePipelines, pobj.Name)
+
 		logger.V(4).Info("pipeline object successfully created", "name", pobj.Name)
 	}
 
-	logger.Info("all pipeline objects successfully created")
+	logger.Info("all pipelines handled successfully")
 
+	// TODO: do something with failed and successful pipelines
 	return ctrl.Result{}, nil
 }
 
-// SetupWithManager sets up the controller with the Manager.
-func (r *ProductDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.ProductDeployment{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		Complete(r)
-}
+const (
+	pipelineOwnerKey = ".metadata.controller"
+)

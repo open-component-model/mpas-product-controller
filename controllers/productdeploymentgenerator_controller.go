@@ -8,64 +8,75 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
-	"github.com/open-component-model/mpas-product-controller/pkg/ocm"
+	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer/json"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
+	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
+	"github.com/open-component-model/ocm-controller/pkg/snapshot"
+	"github.com/open-component-model/ocm/pkg/common/compression"
+	"github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc"
+	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 
 	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
+	"github.com/open-component-model/mpas-product-controller/pkg/ocm"
 )
 
 const (
 	// ProductDescriptionType defines the type of the ProductDescription resource in the component version.
 	ProductDescriptionType = "productdescription.mpas.ocm.software"
-
-	// MaximumNumberOfConcurrentPipelineRuns defines how many concurrent running pipelines there can be.
-	MaximumNumberOfConcurrentPipelineRuns = 10
 )
-
-var productDescription = `apiVersion: meta.mpas.ocm.software/v1alpha1
-kind: ProductDescription
-metadata:
-  name: sample-descriptor
-spec:
-  description: string
-  pipelines:
-  - name: backend
-    source:
-      name: deployment
-      version: 0.0.1
-    validation:
-      name: validation-example
-      version: 0.0.1
-`
 
 // ProductDeploymentGeneratorReconciler reconciles a ProductDeploymentGenerator object
 type ProductDeploymentGeneratorReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 
-	OCMClient ocm.Client
+	OCMClient      ocm.Contract
+	SnapshotWriter snapshot.Writer
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *ProductDeploymentGeneratorReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&v1alpha1.ProductDeploymentGenerator{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Complete(r)
 }
 
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeploymentgenerators,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeploymentgenerators/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeploymentgenerators/finalizers,verbs=update
+//+kubebuilder:rbac:groups=mpas.ocm.software,resources=projects,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=componentsubscriptions,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=delivery.ocm.software,resources=componentversions;componentdescriptors,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=delivery.ocm.software,resources=snapshots,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=delivery.ocm.software,resources=snapshots/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=delivery.ocm.software,resources=snapshots/finalizers,verbs=update
+//+kubebuilder:rbac:groups=delivery.ocm.software,resources=syncs,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -79,12 +90,11 @@ func (r *ProductDeploymentGeneratorReconciler) Reconcile(ctx context.Context, re
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
+
+		return ctrl.Result{}, fmt.Errorf("failed to get product deployment generator: %w", err)
 	}
 
-	var patchHelper *patch.Helper
-	if patchHelper, err = patch.NewHelper(obj, r.Client); err != nil {
-		return
-	}
+	patchHelper := patch.NewSerialPatcher(obj, r.Client)
 
 	// Always attempt to patch the object and status after each reconciliation.
 	defer func() {
@@ -162,6 +172,34 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 	}
 
+	projectList := &projectv1.ProjectList{}
+	if err := r.List(ctx, projectList, client.InNamespace(obj.Namespace)); err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to find project in namespace: %w", err)
+	}
+
+	if v := len(projectList.Items); v != 1 {
+		err := fmt.Errorf("exactly one Project should have been found in namespace %s; got: %d", obj.Namespace, v)
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
+
+		return ctrl.Result{}, err
+	}
+
+	project := &projectList.Items[0]
+
+	if !conditions.IsReady(project) {
+		logger.Info("project not ready yet")
+
+		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
+	}
+
+	if project.Status.RepositoryRef == nil {
+		logger.Info("no repository information is provided yet")
+
+		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
+	}
+
 	component := subscription.GetComponentVersion()
 	logger.Info("fetching component", "component", component)
 
@@ -179,15 +217,157 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{}, fmt.Errorf("failed to authenticate using service account: %w", err)
 	}
 
+	resources, err := cv.GetResourcesByResourceSelectors(compdesc.ResourceSelectorFunc(func(obj compdesc.ResourceSelectionContext) (bool, error) {
+		return obj.GetType() == ProductDescriptionType, nil
+	}))
+
 	logger.Info("retrieved component version, fetching ProductDescription resource", "component", cv.GetName())
 
-	// TODO: Insert OCM resource fetch here.
+	if len(resources) != 1 {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.NumberOfProductDescriptionsInComponentIncorrectReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("number of product descriptions in component should be 1 but was: %d", len(resources))
+	}
+
+	resource := resources[0]
+
+	am, err := resource.AccessMethod()
+	if err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to get access method for product description: %w", err)
+	}
+
+	reader, err := am.Reader()
+	if err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to get product description content: %w", err)
+	}
+
+	decompressed, _, err := compression.AutoDecompress(reader)
+	if err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to get decompressed reader: %w", err)
+	}
+
+	content, err := io.ReadAll(decompressed)
+	if err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to read content for product description: %w", err)
+	}
+
 	prodDesc := &v1alpha1.ProductDescription{}
-	if err := yaml.Unmarshal([]byte(productDescription), prodDesc); err != nil {
+	if err := yaml.Unmarshal(content, prodDesc); err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
+
 		return ctrl.Result{}, fmt.Errorf("failed to unmarshal product description: %w", err)
 	}
 
+	logger.Info("fetched product description", "description", klog.KObj(prodDesc))
+
+	productDeployment, err := r.createProductDeployment(ctx, obj, prodDesc, component)
+	if err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CreateProductPipelineFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to create product deployment: %w", err)
+	}
+
+	snapshotName, err := r.createSnapshot(ctx, obj, productDeployment, component)
+	if err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CreateSnapshotFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to create snapshot for product deployment: %w", err)
+	}
+
+	if project.Spec.Git.CommitTemplate == nil {
+		return ctrl.Result{}, fmt.Errorf("commit template in project cannot be empty")
+	}
+
+	repositoryRef := project.Status.RepositoryRef.Name
+	if v := obj.Spec.RepositoryRef; v != nil {
+		repositoryRef = v.Name
+	}
+
+	sync := &gitv1alpha1.Sync{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      obj.Name + "-sync",
+			Namespace: obj.Namespace,
+		},
+		Spec: gitv1alpha1.SyncSpec{
+			SnapshotRef: corev1.LocalObjectReference{
+				Name: snapshotName,
+			},
+			RepositoryRef: corev1.LocalObjectReference{
+				Name: repositoryRef,
+			},
+			Interval: metav1.Duration{
+				Duration: 1 * time.Minute,
+			},
+			CommitTemplate: gitv1alpha1.CommitTemplate{
+				Name:       project.Spec.Git.CommitTemplate.Name,
+				Email:      project.Spec.Git.CommitTemplate.Email,
+				Message:    project.Spec.Git.CommitTemplate.Message,
+				BaseBranch: project.Spec.Git.DefaultBranch,
+			},
+			AutomaticPullRequestCreation: true,
+			SubPath:                      "products/.",
+		},
+	}
+
+	if _, err := ctrl.CreateOrUpdate(ctx, r.Client, sync, func() error {
+		if sync.ObjectMeta.CreationTimestamp.IsZero() {
+			if err := controllerutil.SetOwnerReference(obj, sync, r.Scheme); err != nil {
+				return fmt.Errorf("failed to set owner to sync object: %w", err)
+			}
+		}
+
+		return nil
+	}); err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CreateSyncFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to create sync request: %w", err)
+	}
+
+	return ctrl.Result{}, nil
+}
+
+// createProductPipeline takes a pipeline description and builds up all the Kubernetes objects that are needed
+// for that resource.
+func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(description v1alpha1.ProductDescription, p v1alpha1.ProductDescriptionPipeline) (v1alpha1.Pipeline, error) {
+	// TODO: Select a target role from the based on the target selector.
+	var targetRole *v1alpha1.TargetRole
+	for _, role := range description.Spec.TargetRoles {
+		if role.Name == p.TargetRoleName {
+			targetRole = &role.TargetRole
+			break
+		}
+	}
+	if targetRole == nil {
+		return v1alpha1.Pipeline{}, fmt.Errorf("failed to find a target role with name %s", p.TargetRoleName)
+	}
+	return v1alpha1.Pipeline{
+		Name:         p.Name,
+		Localization: p.Localization,
+		Configuration: v1alpha1.Configuration{
+			Rules:      p.Configuration.Rules,
+			ValuesFile: v1alpha1.ValuesFile{},
+		},
+		Resource:   p.Source,
+		TargetRole: *targetRole,
+	}, nil
+}
+
+func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator, prodDesc *v1alpha1.ProductDescription, component replicationv1.Component) (*v1alpha1.ProductDeployment, error) {
+	logger := log.FromContext(ctx)
+
 	productDeployment := &v1alpha1.ProductDeployment{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       v1alpha1.ProductDeploymentKind,
+			APIVersion: v1alpha1.GroupVersion.String(),
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      prodDesc.Name,
 			Namespace: obj.Namespace,
@@ -195,37 +375,67 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	}
 
 	spec := v1alpha1.ProductDeploymentSpec{}
+	spec.Component = component
 
 	for _, p := range prodDesc.Spec.Pipelines {
-		spec.Pipelines = append(spec.Pipelines, r.createProductPipeline(p))
+		pipe, err := r.createProductPipeline(*prodDesc, p)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create product pipeline: %w", err)
+		}
+		spec.Pipelines = append(spec.Pipelines, pipe)
 	}
 
 	productDeployment.Spec = spec
 
-	if err := r.Create(ctx, productDeployment); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to create product deployment object: %w", err)
-	}
-
 	logger.Info("successfully generated product deployment", "productDeployment", klog.KObj(productDeployment))
 
-	return ctrl.Result{}, nil
+	return productDeployment, nil
+
 }
 
-// SetupWithManager sets up the controller with the Manager.
-func (r *ProductDeploymentGeneratorReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.ProductDeploymentGenerator{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		Complete(r)
-}
+func (r *ProductDeploymentGeneratorReconciler) createSnapshot(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator, productDeployment *v1alpha1.ProductDeployment, component replicationv1.Component) (string, error) {
+	serializer := json.NewSerializerWithOptions(json.DefaultMetaFactory, r.Scheme, r.Scheme, json.SerializerOptions{
+		Yaml:   true,
+		Pretty: true,
+	})
 
-func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(p v1alpha1.ProductDescriptionPipeline) v1alpha1.Pipeline {
-	var result v1alpha1.Pipeline
-	// Gather Source
-	result.Name = p.Name
+	dir, err := os.MkdirTemp("", "product-deployment")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp folder: %w", err)
+	}
 
-	// Gather Localization
+	defer os.RemoveAll(dir)
 
-	// Gather Configuration
+	productDeploymentFile, err := os.Create(filepath.Join(dir, "product-deployment.yaml"))
+	if err != nil {
+		return "", fmt.Errorf("failed to create file: %w", err)
+	}
 
-	return result
+	defer productDeploymentFile.Close()
+
+	if err := serializer.Encode(productDeployment, productDeploymentFile); err != nil {
+		return "", fmt.Errorf("failed to encode product deployment: %w", err)
+	}
+
+	snapshotName, err := snapshot.GenerateSnapshotName(obj.Name)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate a snapshot name: %w", err)
+	}
+
+	obj.Status.SnapshotName = snapshotName
+
+	identity := ocmmetav1.Identity{
+		ocmv1alpha1.ComponentNameKey:      component.Name,
+		ocmv1alpha1.ComponentVersionKey:   component.Version,
+		v1alpha1.ProductDeploymentNameKey: obj.Name,
+	}
+
+	digest, err := r.SnapshotWriter.Write(ctx, obj, dir, identity)
+	if err != nil {
+		return "", fmt.Errorf("failed to write to the cache: %w", err)
+	}
+
+	obj.Status.LatestSnapshotDigest = digest
+
+	return snapshotName, nil
 }

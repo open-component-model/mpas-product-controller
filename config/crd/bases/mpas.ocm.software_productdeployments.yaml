@@ -59,16 +59,13 @@ spec:
                 type: object
               pipelines:
                 items:
-                  description: Pipeline defines a set of steps that can be performed
-                    in order to deploy a product.
+                  description: Pipeline defines a set of Loca
                   properties:
                     configuration:
                       description: Configuration defines a list of rules to follow
                         and an optional values file.
                       properties:
                         rules:
-                          description: ElementMeta defines a object that is uniquely
-                            identified by its identity.
                           properties:
                             extraIdentity:
                               additionalProperties:
@@ -106,6 +103,14 @@ spec:
                               description: Name is the context unique name of the
                                 object.
                               type: string
+                            referencePath:
+                              items:
+                                additionalProperties:
+                                  type: string
+                                description: Identity describes the identity of an
+                                  object. Only ascii characters are allowed
+                                type: object
+                              type: array
                             version:
                               description: Version is the semver version of the object.
                               type: string
@@ -126,64 +131,6 @@ spec:
                       - rules
                       type: object
                     localization:
-                      description: Localization defines a list of rules which are
-                        named versions.
-                      properties:
-                        rules:
-                          description: ElementMeta defines a object that is uniquely
-                            identified by its identity.
-                          properties:
-                            extraIdentity:
-                              additionalProperties:
-                                type: string
-                              description: ExtraIdentity is the identity of an object.
-                                An additional label with key "name" ist not allowed
-                              type: object
-                            labels:
-                              description: Labels defines an optional set of additional
-                                labels describing the object.
-                              items:
-                                description: Label is a label that can be set on objects.
-                                properties:
-                                  name:
-                                    description: Name is the unique name of the label.
-                                    type: string
-                                  signing:
-                                    description: Signing describes whether the label
-                                      should be included into the signature
-                                    type: boolean
-                                  value:
-                                    description: Value is the json/yaml data of the
-                                      label
-                                    x-kubernetes-preserve-unknown-fields: true
-                                  version:
-                                    description: Version is the optional specification
-                                      version of the attribute value
-                                    type: string
-                                required:
-                                - name
-                                - value
-                                type: object
-                              type: array
-                            name:
-                              description: Name is the context unique name of the
-                                object.
-                              type: string
-                            version:
-                              description: Version is the semver version of the object.
-                              type: string
-                          required:
-                          - name
-                          - version
-                          type: object
-                      required:
-                      - rules
-                      type: object
-                    name:
-                      type: string
-                    resource:
-                      description: ElementMeta defines a object that is uniquely identified
-                        by its identity.
                       properties:
                         extraIdentity:
                           additionalProperties:
@@ -219,6 +166,67 @@ spec:
                         name:
                           description: Name is the context unique name of the object.
                           type: string
+                        referencePath:
+                          items:
+                            additionalProperties:
+                              type: string
+                            description: Identity describes the identity of an object.
+                              Only ascii characters are allowed
+                            type: object
+                          type: array
+                        version:
+                          description: Version is the semver version of the object.
+                          type: string
+                      required:
+                      - name
+                      - version
+                      type: object
+                    name:
+                      type: string
+                    resource:
+                      properties:
+                        extraIdentity:
+                          additionalProperties:
+                            type: string
+                          description: ExtraIdentity is the identity of an object.
+                            An additional label with key "name" ist not allowed
+                          type: object
+                        labels:
+                          description: Labels defines an optional set of additional
+                            labels describing the object.
+                          items:
+                            description: Label is a label that can be set on objects.
+                            properties:
+                              name:
+                                description: Name is the unique name of the label.
+                                type: string
+                              signing:
+                                description: Signing describes whether the label should
+                                  be included into the signature
+                                type: boolean
+                              value:
+                                description: Value is the json/yaml data of the label
+                                x-kubernetes-preserve-unknown-fields: true
+                              version:
+                                description: Version is the optional specification
+                                  version of the attribute value
+                                type: string
+                            required:
+                            - name
+                            - value
+                            type: object
+                          type: array
+                        name:
+                          description: Name is the context unique name of the object.
+                          type: string
+                        referencePath:
+                          items:
+                            additionalProperties:
+                              type: string
+                            description: Identity describes the identity of an object.
+                              Only ascii characters are allowed
+                            type: object
+                          type: array
                         version:
                           description: Version is the semver version of the object.
                           type: string
@@ -300,6 +308,12 @@ spec:
           status:
             description: ProductDeploymentStatus defines the observed state of ProductDeployment.
             properties:
+              activePipelines:
+                description: ActivePipelines has all the pipelines which are all still
+                  running.
+                items:
+                  type: string
+                type: array
               conditions:
                 items:
                   description: "Condition contains details for one aspect of the current

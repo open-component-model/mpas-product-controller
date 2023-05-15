@@ -9,4 +9,14 @@ metadata:
     app.kubernetes.io/created-by: mpas-product-controller
   name: productdescription-sample
 spec:
-  # TODO(user): Add fields here
+  description: description
+  pipelines:
+    - name: name
+      source:
+        name: manifest
+        version: 1.0.0
+        referencePath:
+          - name: deployment
+      validation:
+        name: validation
+        version: 1.0.0
