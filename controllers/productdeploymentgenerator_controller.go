@@ -16,7 +16,7 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
-	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
+	"github.com/open-component-model/ocm/pkg/contexts/ocm/utils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,15 +33,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
+	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	"github.com/open-component-model/ocm-controller/pkg/snapshot"
 	"github.com/open-component-model/ocm/pkg/common/compression"
+	"github.com/open-component-model/ocm/pkg/contexts/ocm"
 	"github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc"
 	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 
 	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
-	"github.com/open-component-model/mpas-product-controller/pkg/ocm"
+	mpasocm "github.com/open-component-model/mpas-product-controller/pkg/ocm"
 )
 
 const (
@@ -54,7 +56,7 @@ type ProductDeploymentGeneratorReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 
-	OCMClient      ocm.Contract
+	OCMClient      mpasocm.Contract
 	SnapshotWriter snapshot.Writer
 }
 
@@ -268,14 +270,29 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 	logger.Info("fetched product description", "description", klog.KObj(prodDesc))
 
-	productDeployment, err := r.createProductDeployment(ctx, obj, prodDesc, component)
+	dir, err := os.MkdirTemp("", "product-deployment")
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to create temp folder: %w", err)
+	}
+
+	defer os.RemoveAll(dir)
+
+	// Create top-level product folder.
+	if err := os.Mkdir(filepath.Join(dir, obj.Name), 0o777); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to create product folder: %w", err)
+	}
+
+	productFolder := filepath.Join(dir, obj.Name)
+
+	productDeployment, err := r.createProductDeployment(ctx, obj, *prodDesc, component, productFolder, cv)
 	if err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CreateProductPipelineFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to create product deployment: %w", err)
 	}
 
-	snapshotName, err := r.createSnapshot(ctx, obj, productDeployment, component)
+	// Note that we pass in the top level folder here.
+	snapshotName, err := r.createSnapshot(ctx, obj, productDeployment, component, dir)
 	if err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CreateSnapshotFailedReason, err.Error())
 
@@ -336,31 +353,70 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 // createProductPipeline takes a pipeline description and builds up all the Kubernetes objects that are needed
 // for that resource.
-func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(description v1alpha1.ProductDescription, p v1alpha1.ProductDescriptionPipeline) (v1alpha1.Pipeline, error) {
+func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(description v1alpha1.ProductDescription, p v1alpha1.ProductDescriptionPipeline, dir string, cv ocm.ComponentVersionAccess) (v1alpha1.Pipeline, error) {
 	// TODO: Select a target role from the based on the target selector.
 	var targetRole *v1alpha1.TargetRole
+
 	for _, role := range description.Spec.TargetRoles {
 		if role.Name == p.TargetRoleName {
 			targetRole = &role.TargetRole
 			break
 		}
 	}
+
 	if targetRole == nil {
 		return v1alpha1.Pipeline{}, fmt.Errorf("failed to find a target role with name %s", p.TargetRoleName)
 	}
+
+	// fetch values and create values.yaml file in dir with pipeline.Name-values.yaml
+	if p.Configuration.Rules.Name != "" {
+		var identities []ocmmetav1.Identity
+		identities = append(identities, p.Configuration.Rules.ReferencePath...)
+
+		res, _, err := utils.ResolveResourceReference(cv, ocmmetav1.NewNestedResourceRef(ocmmetav1.NewIdentity(p.Configuration.Rules.Name), identities), cv.Repository())
+		if err != nil {
+			return v1alpha1.Pipeline{}, fmt.Errorf("failed to resolve reference path to resource: %w", err)
+		}
+
+		am, err := res.AccessMethod()
+		if err != nil {
+			return v1alpha1.Pipeline{}, fmt.Errorf("failed to fetch access method for resource: %w", err)
+		}
+
+		reader, err := am.Reader()
+		if err != nil {
+			return v1alpha1.Pipeline{}, fmt.Errorf("failed to fetch reader for resource: %w", err)
+		}
+
+		uncompressed, _, err := compression.AutoDecompress(reader)
+		if err != nil {
+			return v1alpha1.Pipeline{}, fmt.Errorf("failed to auto decompress: %w", err)
+		}
+		defer uncompressed.Close()
+
+		// This will be problematic with a 6 Gig large object when it's trying to read it all.
+		content, err := io.ReadAll(uncompressed)
+		if err != nil {
+			return v1alpha1.Pipeline{}, fmt.Errorf("failed to read resource data: %w", err)
+		}
+
+		if err := os.WriteFile(filepath.Join(dir, p.Name+"-values.yaml"), content, 0o777); err != nil {
+			return v1alpha1.Pipeline{}, fmt.Errorf("failed to write configuration values file: %w", err)
+		}
+	}
+
 	return v1alpha1.Pipeline{
 		Name:         p.Name,
 		Localization: p.Localization,
 		Configuration: v1alpha1.Configuration{
-			Rules:      p.Configuration.Rules,
-			ValuesFile: v1alpha1.ValuesFile{},
+			Rules: p.Configuration.Rules,
 		},
 		Resource:   p.Source,
 		TargetRole: *targetRole,
 	}, nil
 }
 
-func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator, prodDesc *v1alpha1.ProductDescription, component replicationv1.Component) (*v1alpha1.ProductDeployment, error) {
+func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator, prodDesc v1alpha1.ProductDescription, component replicationv1.Component, dir string, cv ocm.ComponentVersionAccess) (*v1alpha1.ProductDeployment, error) {
 	logger := log.FromContext(ctx)
 
 	productDeployment := &v1alpha1.ProductDeployment{
@@ -378,7 +434,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx conte
 	spec.Component = component
 
 	for _, p := range prodDesc.Spec.Pipelines {
-		pipe, err := r.createProductPipeline(*prodDesc, p)
+		pipe, err := r.createProductPipeline(prodDesc, p, dir, cv)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create product pipeline: %w", err)
 		}
@@ -393,18 +449,11 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx conte
 
 }
 
-func (r *ProductDeploymentGeneratorReconciler) createSnapshot(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator, productDeployment *v1alpha1.ProductDeployment, component replicationv1.Component) (string, error) {
+func (r *ProductDeploymentGeneratorReconciler) createSnapshot(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator, productDeployment *v1alpha1.ProductDeployment, component replicationv1.Component, dir string) (string, error) {
 	serializer := json.NewSerializerWithOptions(json.DefaultMetaFactory, r.Scheme, r.Scheme, json.SerializerOptions{
 		Yaml:   true,
 		Pretty: true,
 	})
-
-	dir, err := os.MkdirTemp("", "product-deployment")
-	if err != nil {
-		return "", fmt.Errorf("failed to create temp folder: %w", err)
-	}
-
-	defer os.RemoveAll(dir)
 
 	productDeploymentFile, err := os.Create(filepath.Join(dir, "product-deployment.yaml"))
 	if err != nil {

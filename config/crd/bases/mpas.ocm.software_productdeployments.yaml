@@ -118,15 +118,6 @@ spec:
                           - name
                           - version
                           type: object
-                        valuesFile:
-                          description: ValuesFile defines a path to a values file
-                            containing User configuration.
-                          properties:
-                            path:
-                              type: string
-                          required:
-                          - path
-                          type: object
                       required:
                       - rules
                       type: object

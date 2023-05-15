@@ -61,9 +61,6 @@ type ValuesFile struct {
 // Configuration defines a list of rules to follow and an optional values file.
 type Configuration struct {
 	Rules ResourceReference `json:"rules"`
-
-	//+optional
-	ValuesFile ValuesFile `json:"valuesFile,omitempty"`
 }
 
 // TargetRole the role defining what targets are available to deploy to.
