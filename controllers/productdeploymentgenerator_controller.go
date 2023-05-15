@@ -16,7 +16,7 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
-	v1alpha12 "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
+	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,7 +33,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
-	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	"github.com/open-component-model/ocm-controller/pkg/snapshot"
 	"github.com/open-component-model/ocm/pkg/common/compression"
@@ -173,19 +172,19 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 	}
 
-	//projectList := &projectv1.ProjectList{}
-	//if err := r.List(ctx, projectList, client.InNamespace(obj.Namespace)); err != nil {
-	//	conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
-	//
-	//	return ctrl.Result{}, fmt.Errorf("failed to find project in namespace: %w", err)
-	//}
-	//
-	//if v := len(projectList.Items); v != 1 {
-	//	err := fmt.Errorf("exactly one Project should have been found in namespace %s; got: %d", obj.Namespace, v)
-	//	conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
-	//
-	//	return ctrl.Result{}, err
-	//}
+	projectList := &projectv1.ProjectList{}
+	if err := r.List(ctx, projectList, client.InNamespace(obj.Namespace)); err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to find project in namespace: %w", err)
+	}
+
+	if v := len(projectList.Items); v != 1 {
+		err := fmt.Errorf("exactly one Project should have been found in namespace %s; got: %d", obj.Namespace, v)
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
+
+		return ctrl.Result{}, err
+	}
 
 	// TODO: Get the Project and stop doing anything until the Project Status contains the Repository name.
 
@@ -271,17 +270,11 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{}, fmt.Errorf("failed to create snapshot for product deployment: %w", err)
 	}
 
-	project := &projectv1.Project{
-		Spec: projectv1.ProjectSpec{
-			Git: v1alpha12.RepositorySpec{
-				DefaultBranch: "main",
-				CommitTemplate: &v1alpha12.CommitTemplate{
-					Email:   "182850+Skarlso@users.noreply.github.com",
-					Message: "Test this shit",
-					Name:    "Gergely Brautigam",
-				},
-			},
-		},
+	// TODO: Get the repositoryRef from the Project
+	project := projectList.Items[0]
+
+	if project.Spec.Git.CommitTemplate == nil {
+		return ctrl.Result{}, fmt.Errorf("commit template in project cannot be empty")
 	}
 
 	sync := &gitv1alpha1.Sync{
