@@ -11,11 +11,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// RepositoryRef represents the name of a repository.
-type RepositoryRef struct {
-	Name string `json:"name"`
-}
-
 // ProductDeploymentGeneratorSpec defines the desired state of ProductDeploymentGenerator
 type ProductDeploymentGeneratorSpec struct {
 	// Interval is the reconciliation interval, i.e. at what interval shall a reconciliation happen.
@@ -26,7 +21,7 @@ type ProductDeploymentGeneratorSpec struct {
 	SubscriptionRef meta.NamespacedObjectReference `json:"subscriptionRef"`
 
 	//+optional
-	RepositoryRef *RepositoryRef `json:"repositoryRef,omitempty"`
+	RepositoryRef *meta.LocalObjectReference `json:"repositoryRef,omitempty"`
 
 	// ServiceAccountName is used to access ocm component repositories. No other auth option is defined.
 	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account

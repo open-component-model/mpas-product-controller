@@ -44,9 +44,11 @@ spec:
                   been finished yet.
                 type: string
               repositoryRef:
-                description: RepositoryRef represents the name of a repository.
+                description: LocalObjectReference contains enough information to locate
+                  the referenced Kubernetes resource object.
                 properties:
                   name:
+                    description: Name of the referent.
                     type: string
                 required:
                 - name

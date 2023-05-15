@@ -8,8 +8,8 @@ require (
 	github.com/distribution/distribution/v3 v3.0.0-20230327091844-0c958010ace2
 	github.com/fluxcd/pkg/apis/meta v1.0.0
 	github.com/fluxcd/pkg/runtime v0.35.0
-	github.com/open-component-model/git-controller v0.3.1-0.20230503143451-0011ba3b181f
-	github.com/open-component-model/mpas-project-controller v0.0.0-20230504160530-63fb9924984c
+	github.com/open-component-model/git-controller v0.3.1
+	github.com/open-component-model/mpas-project-controller v0.0.0-20230515101617-c452450ebed2
 	github.com/open-component-model/ocm v0.3.0-rc.1.0.20230509133031-81dc63e1ab96
 	github.com/open-component-model/ocm-controller v0.7.1
 	github.com/open-component-model/replication-controller v0.2.1-0.20230420172740-670e1238a8c7
@@ -72,7 +72,7 @@ require (
 	github.com/evanphx/json-patch v5.6.0+incompatible // indirect
 	github.com/evanphx/json-patch/v5 v5.6.0 // indirect
 	github.com/felixge/httpsnoop v1.0.3 // indirect
-	github.com/fluxcd/kustomize-controller/api v1.0.0-rc.1 // indirect
+	github.com/fluxcd/kustomize-controller/api v1.0.0-rc.3 // indirect
 	github.com/fluxcd/pkg/apis/kustomize v1.0.0 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/fvbommel/sortorder v1.0.2 // indirect

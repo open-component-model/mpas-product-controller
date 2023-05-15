@@ -389,8 +389,8 @@ github.com/felixge/httpsnoop v1.0.1/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSw
 github.com/felixge/httpsnoop v1.0.3 h1:s/nj+GCswXYzN5v2DpNMuMQYe+0DDwt5WVCU6CWBdXk=
 github.com/felixge/httpsnoop v1.0.3/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
 github.com/flowstack/go-jsonschema v0.1.1/go.mod h1:yL7fNggx1o8rm9RlgXv7hTBWxdBM0rVwpMwimd3F3N0=
-github.com/fluxcd/kustomize-controller/api v1.0.0-rc.1 h1:HnPpGw9RhVyE4LsvOOMUcCo4jA+gSfnkM2Xe/vjlpHg=
-github.com/fluxcd/kustomize-controller/api v1.0.0-rc.1/go.mod h1:ql/HdV+pGzqnHaU5oNyvYR7lHPWc/me3HUPd4g7A9BI=
+github.com/fluxcd/kustomize-controller/api v1.0.0-rc.3 h1:h87VnTN00v6BsBUKqUdZH8Q7QitdwyykGg1oK9yXhlU=
+github.com/fluxcd/kustomize-controller/api v1.0.0-rc.3/go.mod h1:ql/HdV+pGzqnHaU5oNyvYR7lHPWc/me3HUPd4g7A9BI=
 github.com/fluxcd/pkg/apis/kustomize v1.0.0 h1:5T2b/mRZiGWtP7fvSU8gZOApIc06H6SdLX3MlsE6LRo=
 github.com/fluxcd/pkg/apis/kustomize v1.0.0/go.mod h1:XaDYlKxrf9D2zZWcZ0BnSIqGtcm8mdNtJGzZWYjCnQo=
 github.com/fluxcd/pkg/apis/meta v1.0.0 h1:i9IGHd/VNEZELX7mepkiYFbJxs2J5znaB4cN9z2nPm8=
@@ -765,10 +765,10 @@ github.com/onsi/gomega v1.9.0/go.mod h1:Ho0h+IUsWyvy1OpqCwxlQ/21gkhVunqlU8fDGcoT
 github.com/onsi/gomega v1.10.3/go.mod h1:V9xEwhxec5O8UDM77eCW8vLymOMltsqPVYWrpDsH8xc=
 github.com/onsi/gomega v1.27.6 h1:ENqfyGeS5AX/rlXDd/ETokDz93u0YufY1Pgxuy/PvWE=
 github.com/onsi/gomega v1.27.6/go.mod h1:PIQNjfQwkP3aQAH7lf7j87O/5FiNr+ZR8+ipb+qQlhg=
-github.com/open-component-model/git-controller v0.3.1-0.20230503143451-0011ba3b181f h1:4PYVRaGGSM50HTbyv8iKXK10Vb5Xfm45IVettuLV6SI=
-github.com/open-component-model/git-controller v0.3.1-0.20230503143451-0011ba3b181f/go.mod h1:gxAx3CO1s59hs6PGx4d9AjsbmDiWnwJMwiX9GWgaDmY=
-github.com/open-component-model/mpas-project-controller v0.0.0-20230504160530-63fb9924984c h1:QtZuz0ajCxSVbWG0FYn5TNp0yWOf3w4rW5lLjk9UdVc=
-github.com/open-component-model/mpas-project-controller v0.0.0-20230504160530-63fb9924984c/go.mod h1:K+ICTsPSpOqu9XD6J2aFPq35b2lCsE6czn2SbPYy5cM=
+github.com/open-component-model/git-controller v0.3.1 h1:y3DoQ2/R6pxWXi+7HNYUxoz4Lr/D6mdSKkHmsE2BRf0=
+github.com/open-component-model/git-controller v0.3.1/go.mod h1:gxAx3CO1s59hs6PGx4d9AjsbmDiWnwJMwiX9GWgaDmY=
+github.com/open-component-model/mpas-project-controller v0.0.0-20230515101617-c452450ebed2 h1:3Dz1es36Kuf0fL+ZQ0zF4IAjZJ3rNZ0pjE1m56C289A=
+github.com/open-component-model/mpas-project-controller v0.0.0-20230515101617-c452450ebed2/go.mod h1:hcRMN6Xye6nqp7vQVd3+bTt+8JkaYYvZ3yNX5crm6HI=
 github.com/open-component-model/ocm v0.3.0-rc.1.0.20230509133031-81dc63e1ab96 h1:UDOCSZ6JGoYfCKnefg+DTsZd5BgdOaX7t+Kbjnt/QvA=
 github.com/open-component-model/ocm v0.3.0-rc.1.0.20230509133031-81dc63e1ab96/go.mod h1:QbwACnMG6tgGMwkkGD2nAV8K0MlieJAV3kxlXmwzPG4=
 github.com/open-component-model/ocm-controller v0.7.1 h1:oaebZpnX34XuE1GiTdRGmPAv1vMwECcew645f0r+1R8=

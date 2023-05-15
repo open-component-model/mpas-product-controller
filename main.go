@@ -28,6 +28,7 @@ import (
 
 	mpasv1alpha1 "github.com/open-component-model/mpas-product-controller/api/v1alpha1"
 	"github.com/open-component-model/mpas-product-controller/controllers"
+	mpasprojv1alpha1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -40,6 +41,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(replicationv1.AddToScheme(scheme))
 	utilruntime.Must(mpasv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(mpasprojv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(v1alpha12.AddToScheme(scheme))
 	utilruntime.Must(gitv1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme

@@ -186,7 +186,19 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{}, err
 	}
 
-	// TODO: Get the Project and stop doing anything until the Project Status contains the Repository name.
+	project := &projectList.Items[0]
+
+	if !conditions.IsReady(project) {
+		logger.Info("project not ready yet")
+
+		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
+	}
+
+	if project.Status.RepositoryRef == nil {
+		logger.Info("no repository information is provided yet")
+
+		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
+	}
 
 	component := subscription.GetComponentVersion()
 	logger.Info("fetching component", "component", component)
@@ -270,11 +282,13 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{}, fmt.Errorf("failed to create snapshot for product deployment: %w", err)
 	}
 
-	// TODO: Get the repositoryRef from the Project
-	project := projectList.Items[0]
-
 	if project.Spec.Git.CommitTemplate == nil {
 		return ctrl.Result{}, fmt.Errorf("commit template in project cannot be empty")
+	}
+
+	repositoryRef := project.Status.RepositoryRef.Name
+	if v := obj.Spec.RepositoryRef; v != nil {
+		repositoryRef = v.Name
 	}
 
 	sync := &gitv1alpha1.Sync{
@@ -286,17 +300,16 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 			SnapshotRef: corev1.LocalObjectReference{
 				Name: snapshotName,
 			},
-			RepositoryRef: corev1.LocalObjectReference{ // TODO: for now create this by hand
-				Name: obj.Spec.RepositoryRef.Name,
+			RepositoryRef: corev1.LocalObjectReference{
+				Name: repositoryRef,
 			},
 			Interval: metav1.Duration{
 				Duration: 1 * time.Minute,
 			},
 			CommitTemplate: gitv1alpha1.CommitTemplate{
-				Name:    project.Spec.Git.CommitTemplate.Name,
-				Email:   project.Spec.Git.CommitTemplate.Email,
-				Message: project.Spec.Git.CommitTemplate.Message,
-				//TargetBranch: project.Spec.Git.DefaultBranch,
+				Name:       project.Spec.Git.CommitTemplate.Name,
+				Email:      project.Spec.Git.CommitTemplate.Email,
+				Message:    project.Spec.Git.CommitTemplate.Message,
 				BaseBranch: project.Spec.Git.DefaultBranch,
 			},
 			AutomaticPullRequestCreation: true,
