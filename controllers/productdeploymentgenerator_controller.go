@@ -16,6 +16,7 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
+	v1alpha12 "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,6 +28,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -171,19 +173,19 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 	}
 
-	projectList := &projectv1.ProjectList{}
-	if err := r.List(ctx, projectList, client.InNamespace(obj.Namespace)); err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to find project in namespace: %w", err)
-	}
-
-	if v := len(projectList.Items); v != 1 {
-		err := fmt.Errorf("exactly one Project should have been found in namespace %s; got: %d", obj.Namespace, v)
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
-
-		return ctrl.Result{}, err
-	}
+	//projectList := &projectv1.ProjectList{}
+	//if err := r.List(ctx, projectList, client.InNamespace(obj.Namespace)); err != nil {
+	//	conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
+	//
+	//	return ctrl.Result{}, fmt.Errorf("failed to find project in namespace: %w", err)
+	//}
+	//
+	//if v := len(projectList.Items); v != 1 {
+	//	err := fmt.Errorf("exactly one Project should have been found in namespace %s; got: %d", obj.Namespace, v)
+	//	conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
+	//
+	//	return ctrl.Result{}, err
+	//}
 
 	// TODO: Get the Project and stop doing anything until the Project Status contains the Repository name.
 
@@ -269,11 +271,17 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{}, fmt.Errorf("failed to create snapshot for product deployment: %w", err)
 	}
 
-	// TODO: Get the repositoryRef from the Project
-	project := projectList.Items[0]
-
-	if project.Spec.Git.CommitTemplate == nil {
-		return ctrl.Result{}, fmt.Errorf("commit template in project cannot be empty")
+	project := &projectv1.Project{
+		Spec: projectv1.ProjectSpec{
+			Git: v1alpha12.RepositorySpec{
+				DefaultBranch: "main",
+				CommitTemplate: &v1alpha12.CommitTemplate{
+					Email:   "182850+Skarlso@users.noreply.github.com",
+					Message: "Test this shit",
+					Name:    "Gergely Brautigam",
+				},
+			},
+		},
 	}
 
 	sync := &gitv1alpha1.Sync{
@@ -292,18 +300,26 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 				Duration: 1 * time.Minute,
 			},
 			CommitTemplate: gitv1alpha1.CommitTemplate{
-				Name:         project.Spec.Git.CommitTemplate.Name,
-				Email:        project.Spec.Git.CommitTemplate.Email,
-				Message:      project.Spec.Git.CommitTemplate.Message,
-				TargetBranch: project.Spec.Git.DefaultBranch,
-				BaseBranch:   project.Spec.Git.DefaultBranch,
+				Name:    project.Spec.Git.CommitTemplate.Name,
+				Email:   project.Spec.Git.CommitTemplate.Email,
+				Message: project.Spec.Git.CommitTemplate.Message,
+				//TargetBranch: project.Spec.Git.DefaultBranch,
+				BaseBranch: project.Spec.Git.DefaultBranch,
 			},
 			AutomaticPullRequestCreation: true,
 			SubPath:                      "products/.",
 		},
 	}
 
-	if err := r.Create(ctx, sync); err != nil {
+	if _, err := ctrl.CreateOrUpdate(ctx, r.Client, sync, func() error {
+		if sync.ObjectMeta.CreationTimestamp.IsZero() {
+			if err := controllerutil.SetOwnerReference(obj, sync, r.Scheme); err != nil {
+				return fmt.Errorf("failed to set owner to sync object: %w", err)
+			}
+		}
+
+		return nil
+	}); err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CreateSyncFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to create sync request: %w", err)
