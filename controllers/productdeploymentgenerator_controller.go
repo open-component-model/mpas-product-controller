@@ -15,13 +15,14 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
+	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/yaml"
+	kyaml "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -33,6 +34,7 @@ import (
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
 	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
+	ocmconfig "github.com/open-component-model/ocm-controller/pkg/configdata"
 	"github.com/open-component-model/ocm-controller/pkg/snapshot"
 	"github.com/open-component-model/ocm/pkg/contexts/ocm"
 	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
@@ -209,6 +211,8 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 		return ctrl.Result{}, fmt.Errorf("failed to authenticate using service account: %w", err)
 	}
+	defer cv.Close()
+
 	logger.Info("retrieved component version, fetching ProductDescription resource", "component", cv.GetName())
 
 	content, err := r.OCMClient.GetProductDescription(ctx, octx, cv)
@@ -219,7 +223,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	}
 
 	prodDesc := &v1alpha1.ProductDescription{}
-	if err := yaml.Unmarshal(content, prodDesc); err != nil {
+	if err := kyaml.Unmarshal(content, prodDesc); err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to unmarshal product description: %w", err)
@@ -308,9 +312,52 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	return ctrl.Result{}, nil
 }
 
+func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator, prodDesc v1alpha1.ProductDescription, component replicationv1.Component, dir string, cv ocm.ComponentVersionAccess) (*v1alpha1.ProductDeployment, error) {
+	logger := log.FromContext(ctx)
+
+	productDeployment := &v1alpha1.ProductDeployment{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       v1alpha1.ProductDeploymentKind,
+			APIVersion: v1alpha1.GroupVersion.String(),
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      prodDesc.Name,
+			Namespace: obj.Namespace,
+		},
+	}
+
+	spec := v1alpha1.ProductDeploymentSpec{}
+	spec.Component = component
+
+	values := make(map[string]map[string]string)
+
+	for _, p := range prodDesc.Spec.Pipelines {
+		pipe, err := r.createProductPipeline(prodDesc, p, cv, values)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create product pipeline: %w", err)
+		}
+		spec.Pipelines = append(spec.Pipelines, pipe)
+	}
+
+	defaultConfig, err := yaml.Marshal(values)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal default values: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "values.yaml"), defaultConfig, 0o777); err != nil {
+		return nil, fmt.Errorf("failed to write configuration values file: %w", err)
+	}
+
+	productDeployment.Spec = spec
+
+	logger.Info("successfully generated product deployment", "productDeployment", klog.KObj(productDeployment))
+
+	return productDeployment, nil
+
+}
+
 // createProductPipeline takes a pipeline description and builds up all the Kubernetes objects that are needed
 // for that resource.
-func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(description v1alpha1.ProductDescription, p v1alpha1.ProductDescriptionPipeline, dir string, cv ocm.ComponentVersionAccess) (v1alpha1.Pipeline, error) {
+func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(description v1alpha1.ProductDescription, p v1alpha1.ProductDescriptionPipeline, cv ocm.ComponentVersionAccess, values map[string]map[string]string) (v1alpha1.Pipeline, error) {
 	// TODO: Select a target role from the based on the target selector.
 	var targetRole *v1alpha1.TargetRole
 
@@ -332,9 +379,12 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(description
 			return v1alpha1.Pipeline{}, fmt.Errorf("failed to get resource data for %s: %w", p.Configuration.Rules.Name, err)
 		}
 
-		if err := os.WriteFile(filepath.Join(dir, p.Name+"-values.yaml"), content, 0o777); err != nil {
-			return v1alpha1.Pipeline{}, fmt.Errorf("failed to write configuration values file: %w", err)
+		configData := &ocmconfig.ConfigData{}
+		if err := kyaml.Unmarshal(content, configData); err != nil {
+			return v1alpha1.Pipeline{}, fmt.Errorf("failed to get unmarshal config data: %w", err)
 		}
+
+		values[p.Name] = configData.Configuration.Defaults
 	}
 
 	return v1alpha1.Pipeline{
@@ -346,39 +396,6 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(description
 		Resource:   p.Source,
 		TargetRole: *targetRole,
 	}, nil
-}
-
-func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator, prodDesc v1alpha1.ProductDescription, component replicationv1.Component, dir string, cv ocm.ComponentVersionAccess) (*v1alpha1.ProductDeployment, error) {
-	logger := log.FromContext(ctx)
-
-	productDeployment := &v1alpha1.ProductDeployment{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       v1alpha1.ProductDeploymentKind,
-			APIVersion: v1alpha1.GroupVersion.String(),
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      prodDesc.Name,
-			Namespace: obj.Namespace,
-		},
-	}
-
-	spec := v1alpha1.ProductDeploymentSpec{}
-	spec.Component = component
-
-	for _, p := range prodDesc.Spec.Pipelines {
-		pipe, err := r.createProductPipeline(prodDesc, p, dir, cv)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create product pipeline: %w", err)
-		}
-		spec.Pipelines = append(spec.Pipelines, pipe)
-	}
-
-	productDeployment.Spec = spec
-
-	logger.Info("successfully generated product deployment", "productDeployment", klog.KObj(productDeployment))
-
-	return productDeployment, nil
-
 }
 
 func (r *ProductDeploymentGeneratorReconciler) createSnapshot(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator, productDeployment *v1alpha1.ProductDeployment, component replicationv1.Component, dir string) (string, error) {

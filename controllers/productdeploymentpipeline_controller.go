@@ -7,7 +7,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
@@ -70,9 +69,6 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 	}, owner); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to find the owner: %w", err)
 	}
-
-	// TODO: REMOVE THIS!!! THIS IS FOR DEMO PURPOSES!!!!!!!
-	time.Sleep(10 * time.Second)
 
 	objPatcher := patch.NewSerialPatcher(obj, r.Client)
 	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
