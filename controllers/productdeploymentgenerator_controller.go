@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -16,7 +15,6 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
-	"github.com/open-component-model/ocm/pkg/contexts/ocm/utils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,19 +34,12 @@ import (
 	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	"github.com/open-component-model/ocm-controller/pkg/snapshot"
-	"github.com/open-component-model/ocm/pkg/common/compression"
 	"github.com/open-component-model/ocm/pkg/contexts/ocm"
-	"github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc"
 	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 
 	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
 	mpasocm "github.com/open-component-model/mpas-product-controller/pkg/ocm"
-)
-
-const (
-	// ProductDescriptionType defines the type of the ProductDescription resource in the component version.
-	ProductDescriptionType = "productdescription.mpas.ocm.software"
 )
 
 // ProductDeploymentGeneratorReconciler reconciles a ProductDeploymentGenerator object
@@ -218,47 +209,13 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 		return ctrl.Result{}, fmt.Errorf("failed to authenticate using service account: %w", err)
 	}
-
-	resources, err := cv.GetResourcesByResourceSelectors(compdesc.ResourceSelectorFunc(func(obj compdesc.ResourceSelectionContext) (bool, error) {
-		return obj.GetType() == ProductDescriptionType, nil
-	}))
-
 	logger.Info("retrieved component version, fetching ProductDescription resource", "component", cv.GetName())
 
-	if len(resources) != 1 {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.NumberOfProductDescriptionsInComponentIncorrectReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("number of product descriptions in component should be 1 but was: %d", len(resources))
-	}
-
-	resource := resources[0]
-
-	am, err := resource.AccessMethod()
+	content, err := r.OCMClient.GetProductDescription(ctx, octx, cv)
 	if err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to get access method for product description: %w", err)
-	}
-
-	reader, err := am.Reader()
-	if err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to get product description content: %w", err)
-	}
-
-	decompressed, _, err := compression.AutoDecompress(reader)
-	if err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to get decompressed reader: %w", err)
-	}
-
-	content, err := io.ReadAll(decompressed)
-	if err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to read content for product description: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to get product description data: %w", err)
 	}
 
 	prodDesc := &v1alpha1.ProductDescription{}
@@ -370,34 +327,9 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(description
 
 	// fetch values and create values.yaml file in dir with pipeline.Name-values.yaml
 	if p.Configuration.Rules.Name != "" {
-		var identities []ocmmetav1.Identity
-		identities = append(identities, p.Configuration.Rules.ReferencePath...)
-
-		res, _, err := utils.ResolveResourceReference(cv, ocmmetav1.NewNestedResourceRef(ocmmetav1.NewIdentity(p.Configuration.Rules.Name), identities), cv.Repository())
+		content, err := r.OCMClient.GetResourceData(cv, p.Configuration.Rules)
 		if err != nil {
-			return v1alpha1.Pipeline{}, fmt.Errorf("failed to resolve reference path to resource: %w", err)
-		}
-
-		am, err := res.AccessMethod()
-		if err != nil {
-			return v1alpha1.Pipeline{}, fmt.Errorf("failed to fetch access method for resource: %w", err)
-		}
-
-		reader, err := am.Reader()
-		if err != nil {
-			return v1alpha1.Pipeline{}, fmt.Errorf("failed to fetch reader for resource: %w", err)
-		}
-
-		uncompressed, _, err := compression.AutoDecompress(reader)
-		if err != nil {
-			return v1alpha1.Pipeline{}, fmt.Errorf("failed to auto decompress: %w", err)
-		}
-		defer uncompressed.Close()
-
-		// This will be problematic with a 6 Gig large object when it's trying to read it all.
-		content, err := io.ReadAll(uncompressed)
-		if err != nil {
-			return v1alpha1.Pipeline{}, fmt.Errorf("failed to read resource data: %w", err)
+			return v1alpha1.Pipeline{}, fmt.Errorf("failed to get resource data for %s: %w", p.Configuration.Rules.Name, err)
 		}
 
 		if err := os.WriteFile(filepath.Join(dir, p.Name+"-values.yaml"), content, 0o777); err != nil {
@@ -455,7 +387,8 @@ func (r *ProductDeploymentGeneratorReconciler) createSnapshot(ctx context.Contex
 		Pretty: true,
 	})
 
-	productDeploymentFile, err := os.Create(filepath.Join(dir, "product-deployment.yaml"))
+	// Put the product-deployment into the deployment named folder.
+	productDeploymentFile, err := os.Create(filepath.Join(dir, obj.Name, "product-deployment.yaml"))
 	if err != nil {
 		return "", fmt.Errorf("failed to create file: %w", err)
 	}
