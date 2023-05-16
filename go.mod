@@ -5,9 +5,11 @@ go 1.20
 replace oras.land/oras-go => oras.land/oras-go v1.2.3
 
 require (
+	github.com/containers/image/v5 v5.23.0
 	github.com/distribution/distribution/v3 v3.0.0-20230327091844-0c958010ace2
 	github.com/fluxcd/pkg/apis/meta v1.0.0
 	github.com/fluxcd/pkg/runtime v0.35.0
+	github.com/fluxcd/source-controller/api v1.0.0-rc.3
 	github.com/open-component-model/git-controller v0.3.1
 	github.com/open-component-model/mpas-project-controller v0.0.0-20230515101617-c452450ebed2
 	github.com/open-component-model/ocm v0.3.0-rc.1.0.20230509133031-81dc63e1ab96
@@ -15,6 +17,7 @@ require (
 	github.com/open-component-model/replication-controller v0.2.1-0.20230420172740-670e1238a8c7
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/stretchr/testify v1.8.2
+	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.26.3
 	k8s.io/apimachinery v0.26.3
 	k8s.io/client-go v0.26.3
@@ -51,7 +54,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/containerd/containerd v1.7.0 // indirect
 	github.com/containerd/stargz-snapshotter/estargz v0.14.3 // indirect
-	github.com/containers/image/v5 v5.23.0 // indirect
 	github.com/containers/libtrust v0.0.0-20200511145503-9c3a6c22cd9a // indirect
 	github.com/containers/ocicrypt v1.1.6 // indirect
 	github.com/containers/storage v1.43.0 // indirect
@@ -73,6 +75,7 @@ require (
 	github.com/evanphx/json-patch/v5 v5.6.0 // indirect
 	github.com/felixge/httpsnoop v1.0.3 // indirect
 	github.com/fluxcd/kustomize-controller/api v1.0.0-rc.3 // indirect
+	github.com/fluxcd/pkg/apis/acl v0.1.0 // indirect
 	github.com/fluxcd/pkg/apis/kustomize v1.0.0 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/fvbommel/sortorder v1.0.2 // indirect
@@ -177,7 +180,6 @@ require (
 	google.golang.org/protobuf v1.29.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	helm.sh/helm/v3 v3.11.1 // indirect
 	k8s.io/apiextensions-apiserver v0.26.3 // indirect
 	k8s.io/cli-runtime v0.26.3 // indirect

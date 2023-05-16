@@ -22,6 +22,8 @@ type ProductDeploymentSpec struct {
 	Component replicationv1.Component `json:"component"`
 	// +required
 	Pipelines []Pipeline `json:"pipelines"`
+	// +required
+	ServiceAccountName string `json:"serviceAccountName"`
 }
 
 // ProductDeploymentStatus defines the observed state of ProductDeployment.

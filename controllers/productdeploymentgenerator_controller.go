@@ -326,8 +326,10 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx conte
 		},
 	}
 
-	spec := v1alpha1.ProductDeploymentSpec{}
-	spec.Component = component
+	spec := v1alpha1.ProductDeploymentSpec{
+		Component:          component,
+		ServiceAccountName: obj.Spec.ServiceAccountName,
+	}
 
 	values := make(map[string]map[string]string)
 

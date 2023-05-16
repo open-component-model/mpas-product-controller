@@ -292,9 +292,12 @@ spec:
                   - targetRole
                   type: object
                 type: array
+              serviceAccountName:
+                type: string
             required:
             - component
             - pipelines
+            - serviceAccountName
             type: object
           status:
             description: ProductDeploymentStatus defines the observed state of ProductDeployment.
