@@ -79,11 +79,6 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 
 	objPatcher := patch.NewSerialPatcher(obj, r.Client)
 
-	// Create Component Version
-	if err := r.createComponentVersion(ctx, obj, owner); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to create component version: %w", err)
-	}
-
 	// Create Localization
 	localization, err := r.createLocalization(ctx, obj)
 	if err != nil {
@@ -91,7 +86,7 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 	}
 
 	// Create Configuration
-	if err := r.createConfiguration(ctx, obj, localization); err != nil {
+	if err := r.createConfiguration(ctx, obj, owner, localization); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create component version: %w", err)
 	}
 
@@ -109,45 +104,7 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 	return ctrl.Result{}, nil
 }
 
-func (r *ProductDeploymentPipelineReconciler) createComponentVersion(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline, owner *mpasv1alpha1.ProductDeployment) error {
-	cv := &ocmv1alpha1.ComponentVersion{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      r.generateComponentVersionName(obj),
-			Namespace: obj.Namespace,
-		},
-		Spec: ocmv1alpha1.ComponentVersionSpec{
-			Interval:  metav1.Duration{Duration: 10 * time.Minute}, //TODO: think about this
-			Component: owner.Spec.Component.Name,
-			Version: ocmv1alpha1.Version{
-				Semver: owner.Spec.Component.Version,
-			},
-			Repository: ocmv1alpha1.Repository{
-				URL: owner.Spec.Component.Registry.URL,
-			},
-			Verify: nil, // TODO: think about this
-			References: ocmv1alpha1.ReferencesConfig{
-				Expand: true,
-			},
-			ServiceAccountName: owner.Spec.ServiceAccountName,
-		},
-	}
-
-	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, cv, func() error {
-		if cv.ObjectMeta.CreationTimestamp.IsZero() {
-			if err := controllerutil.SetOwnerReference(obj, cv, r.Scheme); err != nil {
-				return fmt.Errorf("failed to set owner to sync object: %w", err)
-			}
-		}
-
-		return nil
-	}); err != nil {
-		return fmt.Errorf("failed to create component version: %w", err)
-	}
-
-	return nil
-}
-
-func (r *ProductDeploymentPipelineReconciler) createConfiguration(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline, localization *ocmv1alpha1.Localization) error {
+func (r *ProductDeploymentPipelineReconciler) createConfiguration(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline, owner *mpasv1alpha1.ProductDeployment, localization *ocmv1alpha1.Localization) error {
 	if obj.Spec.Configuration.Rules.Name == "" {
 		return nil
 	}
@@ -157,7 +114,7 @@ func (r *ProductDeploymentPipelineReconciler) createConfiguration(ctx context.Co
 	source := ocmv1alpha1.ObjectReference{
 		NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
 			Kind:      "ComponentVersion",
-			Name:      r.generateComponentVersionName(obj),
+			Name:      obj.Spec.ComponentRef,
 			Namespace: obj.Namespace,
 		},
 		ResourceRef: &sourceResource,
@@ -184,7 +141,7 @@ func (r *ProductDeploymentPipelineReconciler) createConfiguration(ctx context.Co
 			ConfigRef: &ocmv1alpha1.ObjectReference{
 				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
 					Kind:      "ComponentVersion",
-					Name:      r.generateComponentVersionName(obj),
+					Name:      obj.Spec.ComponentRef,
 					Namespace: obj.Namespace,
 				},
 				ResourceRef: &reference,
@@ -196,8 +153,8 @@ func (r *ProductDeploymentPipelineReconciler) createConfiguration(ctx context.Co
 						Name:      "flux-system",
 						Namespace: "flux-system",
 					},
-					Path:    "values.yaml",
-					SubPath: obj.Spec.Configuration.Rules.Name,
+					Path:    "./products/" + owner.Name + "/values.yaml",
+					SubPath: obj.Name,
 				},
 			},
 		},
@@ -236,7 +193,7 @@ func (r *ProductDeploymentPipelineReconciler) createLocalization(ctx context.Con
 			SourceRef: ocmv1alpha1.ObjectReference{
 				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
 					Kind:      "ComponentVersion",
-					Name:      r.generateComponentVersionName(obj),
+					Name:      obj.Spec.ComponentRef,
 					Namespace: obj.Namespace,
 				},
 				ResourceRef: &source,
@@ -244,7 +201,7 @@ func (r *ProductDeploymentPipelineReconciler) createLocalization(ctx context.Con
 			ConfigRef: &ocmv1alpha1.ObjectReference{
 				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
 					Kind:      "ComponentVersion",
-					Name:      r.generateComponentVersionName(obj),
+					Name:      obj.Spec.ComponentRef,
 					Namespace: obj.Namespace,
 				},
 				ResourceRef: &reference,
@@ -275,7 +232,7 @@ func (r *ProductDeploymentPipelineReconciler) createFluxOCIRepository(ctx contex
 			Namespace: obj.Namespace,
 		},
 		Spec: v1beta2.OCIRepositorySpec{
-			URL: "", // construct from snapshot url and tag
+			URL: "oci://snapshot-url", // construct from snapshot url and tag
 			Reference: &v1beta2.OCIRepositoryRef{
 				Tag: "snapshot tag",
 			},
@@ -297,8 +254,4 @@ func (r *ProductDeploymentPipelineReconciler) createFluxOCIRepository(ctx contex
 	}
 
 	return nil
-}
-
-func (r *ProductDeploymentPipelineReconciler) generateComponentVersionName(obj *mpasv1alpha1.ProductDeploymentPipeline) string {
-	return obj.Name + "component-version"
 }

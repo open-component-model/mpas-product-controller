@@ -37,6 +37,10 @@ spec:
             description: ProductDeploymentPipelineSpec defines the desired state of
               ProductDeploymentPipeline
             properties:
+              componentRef:
+                description: ComponentRef is the name of the generated component version
+                  object.
+                type: string
               configuration:
                 description: Configuration defines a list of rules to follow and an
                   optional values file.
@@ -270,6 +274,7 @@ spec:
                 - type
                 type: object
             required:
+            - componentRef
             - configuration
             - localization
             - resource
