@@ -189,7 +189,17 @@ func (r *ProductDeploymentPipelineReconciler) createConfiguration(ctx context.Co
 				},
 				ResourceRef: &reference,
 			},
-			// TODO: add valuesFrom that Piaras is building.
+			ValuesFrom: &ocmv1alpha1.ValuesSource{
+				FluxSource: &ocmv1alpha1.FluxValuesSource{
+					SourceRef: meta.NamespacedObjectKindReference{
+						Kind:      "GitRepository",
+						Name:      "flux-system",
+						Namespace: "flux-system",
+					},
+					Path:    "values.yaml",
+					SubPath: obj.Spec.Configuration.Rules.Name,
+				},
+			},
 		},
 	}
 
