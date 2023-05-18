@@ -7,11 +7,13 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
+	v1 "github.com/fluxcd/source-controller/api/v1"
 	"github.com/fluxcd/source-controller/api/v1beta2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	mpasv1alpha1 "github.com/open-component-model/mpas-product-controller/api/v1alpha1"
+	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 )
 
@@ -34,7 +37,8 @@ import (
 // ProductDeploymentPipelineReconciler reconciles a ProductDeploymentPipeline object
 type ProductDeploymentPipelineReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme    *runtime.Scheme
+	Namespace string
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -79,20 +83,54 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 
 	objPatcher := patch.NewSerialPatcher(obj, r.Client)
 
+	var snaptshotProvider ocmv1alpha1.SnapshotWriter
 	// Create Localization
 	localization, err := r.createLocalization(ctx, obj)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create component version: %w", err)
 	}
 
+	snaptshotProvider = localization
+
+	projectList := &projectv1.ProjectList{}
+	if err := r.List(ctx, projectList, client.InNamespace(r.Namespace)); err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to find project in namespace: %w", err)
+	}
+
+	if v := len(projectList.Items); v != 1 {
+		err := fmt.Errorf("exactly one Project should have been found in namespace %s; got: %d", obj.Namespace, v)
+		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
+
+		return ctrl.Result{}, err
+	}
+
+	project := &projectList.Items[0]
+
 	// Create Configuration
-	if err := r.createConfiguration(ctx, obj, owner, localization); err != nil {
+	configuration, err := r.createConfiguration(ctx, obj, owner, localization, project)
+	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create component version: %w", err)
 	}
 
+	if configuration != nil {
+		snaptshotProvider = configuration
+	}
+
+	if snaptshotProvider == nil {
+		return ctrl.Result{}, fmt.Errorf("no artifact provider after localization and configuration")
+	}
+
 	// Create Flux OCI
-	if err := r.createFluxOCIRepository(ctx, obj, "lastSnapshotName-figure-this-out"); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to create component version: %w", err)
+	if err := r.createFluxOCIRepository(ctx, obj, snaptshotProvider); err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.Info("waiting for artifact to be available from either configuration or localization")
+
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+
+		return ctrl.Result{}, fmt.Errorf("failed to create oci repository: %w", err)
 	}
 
 	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
@@ -104,9 +142,9 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 	return ctrl.Result{}, nil
 }
 
-func (r *ProductDeploymentPipelineReconciler) createConfiguration(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline, owner *mpasv1alpha1.ProductDeployment, localization *ocmv1alpha1.Localization) error {
+func (r *ProductDeploymentPipelineReconciler) createConfiguration(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline, owner *mpasv1alpha1.ProductDeployment, localization *ocmv1alpha1.Localization, project *projectv1.Project) (*ocmv1alpha1.Configuration, error) {
 	if obj.Spec.Configuration.Rules.Name == "" {
-		return nil
+		return nil, nil
 	}
 
 	reference := ocmv1alpha1.ResourceReference(obj.Spec.Configuration.Rules)
@@ -130,6 +168,31 @@ func (r *ProductDeploymentPipelineReconciler) createConfiguration(ctx context.Co
 		}
 	}
 
+	// get the git repository of the created repository
+
+	// Entry ID: <namespace>_<name>_<group>_<kind>. Just look for a postfix of gitrepository
+	if project.Status.Inventory == nil {
+		return nil, fmt.Errorf("project inventory is empty")
+	}
+
+	var repoName, repoNamespace string
+	for _, e := range project.Status.Inventory.Entries {
+		split := strings.Split(e.ID, "_")
+		if len(split) < 1 {
+			return nil, fmt.Errorf("failed to split ID: %s", e.ID)
+		}
+
+		if split[len(split)-1] == v1.GitRepositoryKind {
+			repoName = split[1]
+			repoNamespace = split[0]
+			break
+		}
+	}
+
+	if repoName == "" {
+		return nil, fmt.Errorf("gitrepository not found in the project inventory")
+	}
+
 	configuration := &ocmv1alpha1.Configuration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      obj.Name + "-configuration",
@@ -150,8 +213,8 @@ func (r *ProductDeploymentPipelineReconciler) createConfiguration(ctx context.Co
 				FluxSource: &ocmv1alpha1.FluxValuesSource{
 					SourceRef: meta.NamespacedObjectKindReference{
 						Kind:      "GitRepository",
-						Name:      "flux-system",
-						Namespace: "flux-system",
+						Name:      repoName,
+						Namespace: repoNamespace,
 					},
 					Path:    "./products/" + owner.Name + "/values.yaml",
 					SubPath: obj.Name,
@@ -169,10 +232,10 @@ func (r *ProductDeploymentPipelineReconciler) createConfiguration(ctx context.Co
 
 		return nil
 	}); err != nil {
-		return fmt.Errorf("failed to create configuration: %w", err)
+		return nil, fmt.Errorf("failed to create configuration: %w", err)
 	}
 
-	return nil
+	return configuration, nil
 }
 
 func (r *ProductDeploymentPipelineReconciler) createLocalization(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline) (*ocmv1alpha1.Localization, error) {
@@ -206,7 +269,6 @@ func (r *ProductDeploymentPipelineReconciler) createLocalization(ctx context.Con
 				},
 				ResourceRef: &reference,
 			},
-			// TODO: add valuesFrom that Piaras is building.
 		},
 	}
 
@@ -225,16 +287,22 @@ func (r *ProductDeploymentPipelineReconciler) createLocalization(ctx context.Con
 	return localization, nil
 }
 
-func (r *ProductDeploymentPipelineReconciler) createFluxOCIRepository(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline, name string) error {
+func (r *ProductDeploymentPipelineReconciler) createFluxOCIRepository(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline, snapshotProvider ocmv1alpha1.SnapshotWriter) error {
+	snapshot := &ocmv1alpha1.Snapshot{}
+	if err := r.Get(ctx, types.NamespacedName{Name: snapshotProvider.GetSnapshotName(), Namespace: obj.Namespace}, snapshot); err != nil {
+		return fmt.Errorf("failed to find snapshot: %w", err)
+	}
+
+	url := strings.ReplaceAll(snapshot.Status.RepositoryURL, "http", "oci")
 	repo := &v1beta2.OCIRepository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      obj.Name + "-oci-repository",
 			Namespace: obj.Namespace,
 		},
 		Spec: v1beta2.OCIRepositorySpec{
-			URL: "oci://snapshot-url", // construct from snapshot url and tag
+			URL: url,
 			Reference: &v1beta2.OCIRepositoryRef{
-				Tag: "snapshot tag",
+				Tag: snapshot.Spec.Tag,
 			},
 			Interval: metav1.Duration{Duration: 10 * time.Minute},
 			Insecure: true,

@@ -27,8 +27,4 @@ const (
 
 	// CreateSnapshotFailedReason is used when we fail to create an ocm-controller.Snapshot object in the cluster.
 	CreateSnapshotFailedReason = "CreateSnapshotFailed"
-
-	// NumberOfProductDescriptionsInComponentIncorrectReason is used when there are 0 or more than 1 product
-	// descriptions in a component.
-	NumberOfProductDescriptionsInComponentIncorrectReason = "NumberOfProductDescriptionsInComponentIncorrect"
 )

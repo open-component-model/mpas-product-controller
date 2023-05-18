@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -65,7 +66,7 @@ func TestProductDeploymentReconciler(t *testing.T) {
 		},
 	}
 
-	fakeKube := env.FakeKubeClient(WithObjets(deployment), WithAddToScheme(v1alpha1.AddToScheme))
+	fakeKube := env.FakeKubeClient(WithObjets(deployment), WithAddToScheme(v1alpha1.AddToScheme), WithAddToScheme(ocmv1alpha1.AddToScheme))
 
 	reconciler := ProductDeploymentReconciler{
 		Client: fakeKube,

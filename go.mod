@@ -12,10 +12,10 @@ require (
 	github.com/fluxcd/pkg/apis/meta v1.0.0
 	github.com/fluxcd/pkg/runtime v0.35.0
 	github.com/fluxcd/source-controller/api v1.0.0-rc.3
-	github.com/open-component-model/git-controller v0.3.1
+	github.com/open-component-model/git-controller v0.3.2-0.20230518142244-66b1dc5e1d9b
 	github.com/open-component-model/mpas-project-controller v0.0.0-20230515101617-c452450ebed2
 	github.com/open-component-model/ocm v0.3.0-rc.1.0.20230509133031-81dc63e1ab96
-	github.com/open-component-model/ocm-controller v0.7.2-0.20230517154101-fce9788ba766
+	github.com/open-component-model/ocm-controller v0.8.0
 	github.com/open-component-model/replication-controller v0.2.1-0.20230420172740-670e1238a8c7
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/stretchr/testify v1.8.2
@@ -63,7 +63,7 @@ require (
 	github.com/cyphar/filepath-securejoin v0.2.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/cli v23.0.1+incompatible // indirect
-	github.com/docker/distribution v2.8.1+incompatible // indirect
+	github.com/docker/distribution v2.8.2+incompatible // indirect
 	github.com/docker/docker v23.0.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.7.0 // indirect
 	github.com/docker/go v1.5.1-1.0.20160303222718-d30aec9fd63c // indirect

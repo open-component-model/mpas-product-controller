@@ -34,7 +34,8 @@ const (
 // ProductDeploymentReconciler reconciles a ProductDeployment object
 type ProductDeploymentReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme    *runtime.Scheme
+	Namespace string
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -150,7 +151,7 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 	alreadyCreatedPipelines := make(map[string]struct{})
 
 	existingPipelines := &v1alpha1.ProductDeploymentPipelineList{}
-	if err := r.List(ctx, existingPipelines, client.InNamespace(obj.Namespace), client.MatchingFields{pipelineOwnerKey: obj.Name}); err != nil {
+	if err := r.List(ctx, existingPipelines, client.InNamespace(r.Namespace), client.MatchingFields{pipelineOwnerKey: obj.Name}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list owned pipelines: %w", err)
 	}
 

@@ -51,6 +51,7 @@ type ProductDeploymentGeneratorReconciler struct {
 
 	OCMClient      mpasocm.Contract
 	SnapshotWriter snapshot.Writer
+	Namespace      string
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -170,7 +171,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	}
 
 	projectList := &projectv1.ProjectList{}
-	if err := r.List(ctx, projectList, client.InNamespace(obj.Namespace)); err != nil {
+	if err := r.List(ctx, projectList, client.InNamespace(r.Namespace)); err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to find project in namespace: %w", err)
@@ -280,8 +281,9 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 			SnapshotRef: corev1.LocalObjectReference{
 				Name: snapshotName,
 			},
-			RepositoryRef: corev1.LocalObjectReference{
-				Name: repositoryRef,
+			RepositoryRef: meta.NamespacedObjectReference{
+				Name:      repositoryRef,
+				Namespace: r.Namespace,
 			},
 			Interval: metav1.Duration{
 				Duration: 1 * time.Minute,
