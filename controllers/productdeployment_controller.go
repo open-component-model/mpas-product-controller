@@ -187,11 +187,15 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 			},
 		}
 
-		if err := controllerutil.SetControllerReference(obj, pobj, r.Scheme); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to set owner reference: %w", err)
-		}
+		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, pobj, func() error {
+			if pobj.ObjectMeta.CreationTimestamp.IsZero() {
+				if err := controllerutil.SetOwnerReference(obj, pobj, r.Scheme); err != nil {
+					return fmt.Errorf("failed to set owner to pipeline object object: %w", err)
+				}
+			}
 
-		if err := r.Create(ctx, pobj); err != nil {
+			return nil
+		}); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to create pipeline object: %w", err)
 		}
 

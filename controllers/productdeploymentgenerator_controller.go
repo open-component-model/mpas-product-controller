@@ -44,6 +44,12 @@ import (
 	mpasocm "github.com/open-component-model/mpas-product-controller/pkg/ocm"
 )
 
+const (
+	kustomizationFile = `resources:
+- product-deployment.yaml
+`
+)
+
 // ProductDeploymentGeneratorReconciler reconciles a ProductDeploymentGenerator object
 type ProductDeploymentGeneratorReconciler struct {
 	client.Client
@@ -417,6 +423,10 @@ func (r *ProductDeploymentGeneratorReconciler) createSnapshot(ctx context.Contex
 	}
 
 	defer productDeploymentFile.Close()
+
+	if err := os.WriteFile(filepath.Join(dir, obj.Name, "kustomization.yaml"), []byte(kustomizationFile), 0o777); err != nil {
+		return "", fmt.Errorf("failed to create kustomization file: %w", err)
+	}
 
 	if err := serializer.Encode(productDeployment, productDeploymentFile); err != nil {
 		return "", fmt.Errorf("failed to encode product deployment: %w", err)
