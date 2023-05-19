@@ -12,10 +12,10 @@ require (
 	github.com/fluxcd/pkg/apis/meta v1.0.0
 	github.com/fluxcd/pkg/runtime v0.35.0
 	github.com/fluxcd/source-controller/api v1.0.0-rc.3
-	github.com/open-component-model/git-controller v0.3.2-0.20230518142244-66b1dc5e1d9b
-	github.com/open-component-model/mpas-project-controller v0.0.0-20230515101617-c452450ebed2
+	github.com/open-component-model/git-controller v0.4.0
+	github.com/open-component-model/mpas-project-controller v0.1.0
 	github.com/open-component-model/ocm v0.3.0-rc.1.0.20230509133031-81dc63e1ab96
-	github.com/open-component-model/ocm-controller v0.8.0
+	github.com/open-component-model/ocm-controller v0.8.1
 	github.com/open-component-model/replication-controller v0.2.1-0.20230420172740-670e1238a8c7
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/stretchr/testify v1.8.2
