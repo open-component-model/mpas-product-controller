@@ -145,6 +145,8 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 	logger.Info("preparing to create pipeline objects")
 
 	if err := r.createComponentVersion(ctx, obj); err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CreateComponentVersionFailedReason, err.Error())
+
 		return ctrl.Result{}, fmt.Errorf("failed to create component version: %w", err)
 	}
 
@@ -179,11 +181,11 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 				Namespace: obj.Namespace,
 			},
 			Spec: v1alpha1.ProductDeploymentPipelineSpec{
-				Resource:      pipeline.Resource,
-				Localization:  pipeline.Localization,
-				Configuration: pipeline.Configuration,
-				TargetRole:    pipeline.TargetRole,
-				ComponentRef:  r.generateComponentVersionName(obj),
+				Resource:            pipeline.Resource,
+				Localization:        pipeline.Localization,
+				Configuration:       pipeline.Configuration,
+				TargetRole:          pipeline.TargetRole,
+				ComponentVersionRef: r.generateComponentVersionName(obj),
 			},
 		}
 

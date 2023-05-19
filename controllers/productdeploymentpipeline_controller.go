@@ -83,14 +83,17 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 
 	objPatcher := patch.NewSerialPatcher(obj, r.Client)
 
-	var snaptshotProvider ocmv1alpha1.SnapshotWriter
+	var snapshotProvider ocmv1alpha1.SnapshotWriter
 	// Create Localization
 	localization, err := r.createLocalization(ctx, obj)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to create component version: %w", err)
+		err := fmt.Errorf("failed to create localization: %w", err)
+		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.CreateLocalizationFailedReason, err.Error())
+
+		return ctrl.Result{}, err
 	}
 
-	snaptshotProvider = localization
+	snapshotProvider = localization
 
 	projectList := &projectv1.ProjectList{}
 	if err := r.List(ctx, projectList, client.InNamespace(r.Namespace)); err != nil {
@@ -111,32 +114,40 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 	// Create Configuration
 	configuration, err := r.createConfiguration(ctx, obj, owner, localization, project)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to create component version: %w", err)
+		err := fmt.Errorf("failed to create configuration: %w", err)
+		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.CreateConfigurationFailedReason, err.Error())
+
+		return ctrl.Result{}, err
 	}
 
 	if configuration != nil {
-		snaptshotProvider = configuration
+		snapshotProvider = configuration
 	}
 
-	if snaptshotProvider == nil {
+	if snapshotProvider == nil {
 		return ctrl.Result{}, fmt.Errorf("no artifact provider after localization and configuration")
 	}
 
 	// Create Flux OCI
-	if err := r.createFluxOCIRepository(ctx, obj, snaptshotProvider); err != nil {
+	if err := r.createFluxOCIRepository(ctx, obj, snapshotProvider); err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("waiting for artifact to be available from either configuration or localization")
 
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
+		err := fmt.Errorf("failed to create oci repository: %w", err)
+		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.CreateOCIRepositoryFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to create oci repository: %w", err)
+		return ctrl.Result{}, err
 	}
 
 	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
 
 	if err := objPatcher.Patch(ctx, obj); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to patch pipeline object '%s': %w", obj.Name, err)
+		err := fmt.Errorf("failed to patch object: %w", err)
+		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.PatchFailedReason, err.Error())
+
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
@@ -152,7 +163,7 @@ func (r *ProductDeploymentPipelineReconciler) createConfiguration(ctx context.Co
 	source := ocmv1alpha1.ObjectReference{
 		NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
 			Kind:      "ComponentVersion",
-			Name:      obj.Spec.ComponentRef,
+			Name:      obj.Spec.ComponentVersionRef,
 			Namespace: obj.Namespace,
 		},
 		ResourceRef: &sourceResource,
@@ -204,7 +215,7 @@ func (r *ProductDeploymentPipelineReconciler) createConfiguration(ctx context.Co
 			ConfigRef: &ocmv1alpha1.ObjectReference{
 				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
 					Kind:      "ComponentVersion",
-					Name:      obj.Spec.ComponentRef,
+					Name:      obj.Spec.ComponentVersionRef,
 					Namespace: obj.Namespace,
 				},
 				ResourceRef: &reference,
@@ -256,7 +267,7 @@ func (r *ProductDeploymentPipelineReconciler) createLocalization(ctx context.Con
 			SourceRef: ocmv1alpha1.ObjectReference{
 				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
 					Kind:      "ComponentVersion",
-					Name:      obj.Spec.ComponentRef,
+					Name:      obj.Spec.ComponentVersionRef,
 					Namespace: obj.Namespace,
 				},
 				ResourceRef: &source,
@@ -264,7 +275,7 @@ func (r *ProductDeploymentPipelineReconciler) createLocalization(ctx context.Con
 			ConfigRef: &ocmv1alpha1.ObjectReference{
 				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
 					Kind:      "ComponentVersion",
-					Name:      obj.Spec.ComponentRef,
+					Name:      obj.Spec.ComponentVersionRef,
 					Namespace: obj.Namespace,
 				},
 				ResourceRef: &reference,

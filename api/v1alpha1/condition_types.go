@@ -27,4 +27,19 @@ const (
 
 	// CreateSnapshotFailedReason is used when we fail to create an ocm-controller.Snapshot object in the cluster.
 	CreateSnapshotFailedReason = "CreateSnapshotFailed"
+
+	// CreateComponentVersionFailedReason is used when we fail to create an ocm-controller.ComponentVersion object in the cluster.
+	CreateComponentVersionFailedReason = "CreateComponentVersionFailed"
+
+	// CreateLocalizationFailedReason is used when we fail to create an ocm-controller.Localization object in the cluster.
+	CreateLocalizationFailedReason = "CreateLocalizationFailed"
+
+	// CreateConfigurationFailedReason is used when we fail to create an ocm-controller.Configuration object in the cluster.
+	CreateConfigurationFailedReason = "CreateConfigurationFailed"
+
+	// CreateOCIRepositoryFailedReason is used when we fail to create an OCIRepository object in the cluster.
+	CreateOCIRepositoryFailedReason = "CreateOCIRepositoryFailed"
+
+	// PatchFailedReason is used when we fail to Patch the pipeline object in the cluster.
+	PatchFailedReason = "PatchFailedReasonFailed"
 )
