@@ -151,7 +151,7 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 	alreadyCreatedPipelines := make(map[string]struct{})
 
 	existingPipelines := &v1alpha1.ProductDeploymentPipelineList{}
-	if err := r.List(ctx, existingPipelines, client.InNamespace(r.Namespace), client.MatchingFields{pipelineOwnerKey: obj.Name}); err != nil {
+	if err := r.List(ctx, existingPipelines, client.InNamespace(obj.Namespace), client.MatchingFields{pipelineOwnerKey: obj.Name}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list owned pipelines: %w", err)
 	}
 
@@ -189,7 +189,7 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 
 		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, pobj, func() error {
 			if pobj.ObjectMeta.CreationTimestamp.IsZero() {
-				if err := controllerutil.SetOwnerReference(obj, pobj, r.Scheme); err != nil {
+				if err := controllerutil.SetControllerReference(obj, pobj, r.Scheme); err != nil {
 					return fmt.Errorf("failed to set owner to pipeline object object: %w", err)
 				}
 			}
