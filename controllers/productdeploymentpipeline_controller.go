@@ -6,6 +6,7 @@ package controllers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -54,7 +55,7 @@ func (r *ProductDeploymentPipelineReconciler) SetupWithManager(mgr ctrl.Manager)
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	logger := log.FromContext(ctx)
 
 	logger.Info("reconciling pipeline object", "pipeline", req.NamespacedName)
@@ -82,6 +83,23 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 	}
 
 	objPatcher := patch.NewSerialPatcher(obj, r.Client)
+
+	// Always attempt to patch the object and status after each reconciliation.
+	defer func() {
+		// Patching has not been set up, or the controller errored earlier.
+		if objPatcher == nil {
+			return
+		}
+
+		// Set status observed generation option if the object is stalled or ready.
+		if conditions.IsStalled(obj) || conditions.IsReady(obj) {
+			obj.Status.ObservedGeneration = obj.Generation
+		}
+
+		if perr := objPatcher.Patch(ctx, obj); perr != nil {
+			err = errors.Join(err, perr)
+		}
+	}()
 
 	var snapshotProvider ocmv1alpha1.SnapshotWriter
 	// Create Localization
@@ -131,7 +149,7 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 	// Create Flux OCI
 	if err := r.createFluxOCIRepository(ctx, obj, snapshotProvider); err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("waiting for artifact to be available from either configuration or localization")
+			logger.Info("waiting for artifact to be available from either configuration or localization for pipeline", "pipeline", obj.Name)
 
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
@@ -142,13 +160,6 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 	}
 
 	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
-
-	if err := objPatcher.Patch(ctx, obj); err != nil {
-		err := fmt.Errorf("failed to patch object: %w", err)
-		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.PatchFailedReason, err.Error())
-
-		return ctrl.Result{}, err
-	}
 
 	return ctrl.Result{}, nil
 }
