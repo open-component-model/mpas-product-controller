@@ -144,7 +144,7 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 	logger := log.FromContext(ctx)
 	logger.Info("preparing to create pipeline objects")
 
-	if err := r.createComponentVersion(ctx, obj); err != nil {
+	if err := r.createOrUpdateComponentVersion(ctx, obj); err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CreateComponentVersionFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to create component version: %w", err)
@@ -212,7 +212,7 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 	return ctrl.Result{}, nil
 }
 
-func (r *ProductDeploymentReconciler) createComponentVersion(ctx context.Context, obj *v1alpha1.ProductDeployment) error {
+func (r *ProductDeploymentReconciler) createOrUpdateComponentVersion(ctx context.Context, obj *v1alpha1.ProductDeployment) error {
 	cv := &ocmv1alpha1.ComponentVersion{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.generateComponentVersionName(obj),

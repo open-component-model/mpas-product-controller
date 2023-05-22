@@ -32,9 +32,6 @@ import (
 	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 )
 
-// TODO: Create a Finalizer for all the created objects. Also, create a cleanup in case the creation of a single object
-// failed.
-
 // ProductDeploymentPipelineReconciler reconciles a ProductDeploymentPipeline object
 type ProductDeploymentPipelineReconciler struct {
 	client.Client
@@ -103,7 +100,7 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 
 	var snapshotProvider ocmv1alpha1.SnapshotWriter
 	// Create Localization
-	localization, err := r.createLocalization(ctx, obj)
+	localization, err := r.createOrUpdateLocalization(ctx, obj)
 	if err != nil {
 		err := fmt.Errorf("failed to create localization: %w", err)
 		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.CreateLocalizationFailedReason, err.Error())
@@ -130,7 +127,7 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 	project := &projectList.Items[0]
 
 	// Create Configuration
-	configuration, err := r.createConfiguration(ctx, obj, owner, localization, project)
+	configuration, err := r.createOrUpdateConfiguration(ctx, obj, owner, localization, project)
 	if err != nil {
 		err := fmt.Errorf("failed to create configuration: %w", err)
 		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.CreateConfigurationFailedReason, err.Error())
@@ -147,7 +144,7 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 	}
 
 	// Create Flux OCI
-	if err := r.createFluxOCIRepository(ctx, obj, snapshotProvider); err != nil {
+	if err := r.createOrUpdateFluxOCIRepository(ctx, obj, snapshotProvider); err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("waiting for artifact to be available from either configuration or localization for pipeline", "pipeline", obj.Name)
 
@@ -164,7 +161,7 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 	return ctrl.Result{}, nil
 }
 
-func (r *ProductDeploymentPipelineReconciler) createConfiguration(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline, owner *mpasv1alpha1.ProductDeployment, localization *ocmv1alpha1.Localization, project *projectv1.Project) (*ocmv1alpha1.Configuration, error) {
+func (r *ProductDeploymentPipelineReconciler) createOrUpdateConfiguration(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline, owner *mpasv1alpha1.ProductDeployment, localization *ocmv1alpha1.Localization, project *projectv1.Project) (*ocmv1alpha1.Configuration, error) {
 	if obj.Spec.Configuration.Rules.Name == "" {
 		return nil, nil
 	}
@@ -260,7 +257,7 @@ func (r *ProductDeploymentPipelineReconciler) createConfiguration(ctx context.Co
 	return configuration, nil
 }
 
-func (r *ProductDeploymentPipelineReconciler) createLocalization(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline) (*ocmv1alpha1.Localization, error) {
+func (r *ProductDeploymentPipelineReconciler) createOrUpdateLocalization(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline) (*ocmv1alpha1.Localization, error) {
 	if obj.Spec.Localization.Name == "" {
 		return nil, nil
 	}
@@ -309,7 +306,7 @@ func (r *ProductDeploymentPipelineReconciler) createLocalization(ctx context.Con
 	return localization, nil
 }
 
-func (r *ProductDeploymentPipelineReconciler) createFluxOCIRepository(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline, snapshotProvider ocmv1alpha1.SnapshotWriter) error {
+func (r *ProductDeploymentPipelineReconciler) createOrUpdateFluxOCIRepository(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline, snapshotProvider ocmv1alpha1.SnapshotWriter) error {
 	snapshot := &ocmv1alpha1.Snapshot{}
 	if err := r.Get(ctx, types.NamespacedName{Name: snapshotProvider.GetSnapshotName(), Namespace: obj.Namespace}, snapshot); err != nil {
 		return fmt.Errorf("failed to find snapshot: %w", err)
