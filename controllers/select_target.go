@@ -13,26 +13,37 @@ import (
 )
 
 // FilterTarget selects a target based on the provided filtering options.
-func FilterTarget(ctx context.Context, c client.Client, role v1alpha1.TargetRole, namespace string) (*v1alpha1.Target, error) {
+func FilterTarget(ctx context.Context, c client.Client, role v1alpha1.TargetRole, namespace string) (v1alpha1.Target, error) {
 	targetList := &v1alpha1.TargetList{}
 
-	m, err := v1.LabelSelectorAsMap(&role.Selector)
+	m, err := v1.LabelSelectorAsSelector(&role.Selector)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse label selectors to map: %w", err)
+		return v1alpha1.Target{}, fmt.Errorf("failed to parse label selectors to map: %w", err)
 	}
 
-	if err := c.List(ctx, targetList, client.InNamespace(namespace), client.MatchingLabels(m)); err != nil {
-		return nil, fmt.Errorf("failed to list targets: %w", err)
+	// we can't use client.MatchingFields for spec.type, because we don't have spec.type registered.
+	// maybe we should and the above range could be avoided?
+	if err := c.List(ctx, targetList, client.InNamespace(namespace), client.MatchingLabelsSelector{
+		Selector: m,
+	}); err != nil {
+		return v1alpha1.Target{}, fmt.Errorf("failed to list targets: %w", err)
 	}
 
-	switch len(targetList.Items) {
+	var targets []v1alpha1.Target
+	for _, target := range targetList.Items {
+		if target.Spec.Type == role.Type {
+			targets = append(targets, target)
+		}
+	}
+
+	switch len(targets) {
 	case 0:
-		return nil, fmt.Errorf("no targets found using the provided selector filters")
+		return v1alpha1.Target{}, fmt.Errorf("no targets found using the provided selector filters")
 	case 1:
-		return &targetList.Items[0], nil
+		return targets[0], nil
 	default:
 		r := rand.New(rand.NewSource(time.Now().Unix()))
-		index := r.Intn(len(targetList.Items))
-		return &targetList.Items[index], nil
+		index := r.Intn(len(targets))
+		return targets[index], nil
 	}
 }

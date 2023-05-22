@@ -165,7 +165,7 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 		}
 
 		// Update the selected target.
-		obj.Status.SelectedTarget = target
+		obj.Status.SelectedTarget = &target
 
 		if err := r.createOrUpdateKustomization(ctx, obj, target); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to generate target kustomization: %w", err)
@@ -359,7 +359,7 @@ func (r *ProductDeploymentPipelineReconciler) createOrUpdateFluxOCIRepository(ct
 	return nil
 }
 
-func (r *ProductDeploymentPipelineReconciler) createOrUpdateKustomization(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline, target *mpasv1alpha1.Target) error {
+func (r *ProductDeploymentPipelineReconciler) createOrUpdateKustomization(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline, target mpasv1alpha1.Target) error {
 	if target.Spec.Access == nil {
 		return fmt.Errorf("access needs to be defined for the kubernetes target type")
 	}
