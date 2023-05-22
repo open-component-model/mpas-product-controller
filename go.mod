@@ -9,6 +9,7 @@ replace github.com/opencontainers/go-digest => github.com/opencontainers/go-dige
 require (
 	github.com/containers/image/v5 v5.23.0
 	github.com/distribution/distribution/v3 v3.0.0-20230327091844-0c958010ace2
+	github.com/fluxcd/kustomize-controller/api v1.0.0-rc.3
 	github.com/fluxcd/pkg/apis/meta v1.0.0
 	github.com/fluxcd/pkg/runtime v0.35.0
 	github.com/fluxcd/source-controller/api v1.0.0-rc.3
@@ -76,7 +77,6 @@ require (
 	github.com/evanphx/json-patch v5.6.0+incompatible // indirect
 	github.com/evanphx/json-patch/v5 v5.6.0 // indirect
 	github.com/felixge/httpsnoop v1.0.3 // indirect
-	github.com/fluxcd/kustomize-controller/api v1.0.0-rc.3 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.1.0 // indirect
 	github.com/fluxcd/pkg/apis/kustomize v1.0.0 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect

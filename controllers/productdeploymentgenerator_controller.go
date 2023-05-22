@@ -373,6 +373,8 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(description
 	// TODO: Select a target role from the based on the target selector.
 	var targetRole *v1alpha1.TargetRole
 
+	// TODO: If target role is empty, select one from the list
+	// if the list is empty, select one from the available targets.
 	for _, role := range description.Spec.TargetRoles {
 		if role.Name == p.TargetRoleName {
 			targetRole = &role.TargetRole

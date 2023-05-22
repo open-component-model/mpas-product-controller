@@ -279,6 +279,7 @@ spec:
                           type: object
                           x-kubernetes-map-type: atomic
                         type:
+                          description: TargetType defines valid types for Targets.
                           type: string
                       required:
                       - selector

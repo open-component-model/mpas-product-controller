@@ -37,6 +37,10 @@ type ProductDeploymentPipelineStatus struct {
 	// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
 	// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// SelectedTarget defines the target in which this pipeline was deployed into.
+	// +optional
+	SelectedTarget *Target `json:"target,omitempty"`
 }
 
 // GetConditions returns the conditions of the ComponentVersion.

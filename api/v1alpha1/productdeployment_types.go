@@ -62,7 +62,7 @@ type Configuration struct {
 
 // TargetRole the role defining what targets are available to deploy to.
 type TargetRole struct {
-	Type     string               `json:"type"`
+	Type     TargetType           `json:"type"`
 	Selector metav1.LabelSelector `json:"selector"`
 }
 
