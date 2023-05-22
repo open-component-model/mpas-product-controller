@@ -11,6 +11,9 @@ import (
 
 // ProductDeploymentPipelineSpec defines the desired state of ProductDeploymentPipeline
 type ProductDeploymentPipelineSpec struct {
+	// ComponentVersionRef is the name of the generated component version object.
+	// +required
+	ComponentVersionRef string `json:"componentVersionRef"`
 	// +required
 	Resource ResourceReference `json:"resource"`
 	// +required

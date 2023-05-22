@@ -7,7 +7,12 @@ package ocm
 import (
 	"context"
 	"fmt"
+	"io"
 
+	"github.com/containers/image/v5/pkg/compression"
+	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
+	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
+	"github.com/open-component-model/ocm/pkg/contexts/ocm/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -15,15 +20,23 @@ import (
 
 	"github.com/open-component-model/ocm/pkg/contexts/credentials/repositories/dockerconfig"
 	"github.com/open-component-model/ocm/pkg/contexts/ocm"
+	"github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc"
 	"github.com/open-component-model/ocm/pkg/contexts/ocm/repositories/ocireg"
 )
 
-const dockerConfigKey = ".dockerconfigjson"
+const (
+	dockerConfigKey = ".dockerconfigjson"
+
+	// ProductDescriptionType defines the type of the ProductDescription resource in the component version.
+	ProductDescriptionType = "productdescription.mpas.ocm.software"
+)
 
 // Contract defines a subset of capabilities from the OCM library.
 type Contract interface {
 	CreateAuthenticatedOCMContext(ctx context.Context, serviceAccountName, namespace string) (ocm.Context, error)
 	GetComponentVersion(ctx context.Context, octx ocm.Context, url, name, version string) (ocm.ComponentVersionAccess, error)
+	GetProductDescription(ctx context.Context, octx ocm.Context, cv ocm.ComponentVersionAccess) ([]byte, error)
+	GetResourceData(cv ocm.ComponentVersionAccess, ref v1alpha1.ResourceReference) ([]byte, error)
 }
 
 // Client implements the OCM fetcher interface.
@@ -105,4 +118,75 @@ func (c *Client) GetComponentVersion(ctx context.Context, octx ocm.Context, url,
 	}
 
 	return cv, nil
+}
+
+func (c *Client) GetProductDescription(ctx context.Context, octx ocm.Context, cv ocm.ComponentVersionAccess) ([]byte, error) {
+	resources, err := cv.GetResourcesByResourceSelectors(compdesc.ResourceSelectorFunc(func(obj compdesc.ResourceSelectionContext) (bool, error) {
+		return obj.GetType() == ProductDescriptionType, nil
+	}))
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get resource by selector: %w", err)
+	}
+
+	if len(resources) != 1 {
+		return nil, fmt.Errorf("number of product descriptions in component should be 1 but was: %d", len(resources))
+	}
+
+	resource := resources[0]
+
+	am, err := resource.AccessMethod()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get access method for product description: %w", err)
+	}
+
+	reader, err := am.Reader()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get product description content: %w", err)
+	}
+
+	decompressed, _, err := compression.AutoDecompress(reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get decompressed reader: %w", err)
+	}
+
+	content, err := io.ReadAll(decompressed)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read content for product description: %w", err)
+	}
+
+	return content, nil
+}
+
+func (c *Client) GetResourceData(cv ocm.ComponentVersionAccess, ref v1alpha1.ResourceReference) ([]byte, error) {
+	var identities []ocmmetav1.Identity
+	identities = append(identities, ref.ReferencePath...)
+
+	res, _, err := utils.ResolveResourceReference(cv, ocmmetav1.NewNestedResourceRef(ocmmetav1.NewIdentity(ref.Name), identities), cv.Repository())
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve reference path to resource: %w", err)
+	}
+
+	am, err := res.AccessMethod()
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch access method for resource: %w", err)
+	}
+
+	reader, err := am.Reader()
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch reader for resource: %w", err)
+	}
+
+	uncompressed, _, err := compression.AutoDecompress(reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to auto decompress: %w", err)
+	}
+	defer uncompressed.Close()
+
+	content, err := io.ReadAll(uncompressed)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read resource data: %w", err)
+	}
+
+	return content, nil
 }

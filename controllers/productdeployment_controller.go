@@ -8,10 +8,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
+	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -23,6 +25,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
+)
+
+const (
+	pipelineOwnerKey = ".metadata.controller"
 )
 
 // ProductDeploymentReconciler reconciles a ProductDeployment object
@@ -137,6 +143,12 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 	logger := log.FromContext(ctx)
 	logger.Info("preparing to create pipeline objects")
 
+	if err := r.createOrUpdateComponentVersion(ctx, obj); err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CreateComponentVersionFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to create component version: %w", err)
+	}
+
 	alreadyCreatedPipelines := make(map[string]struct{})
 
 	existingPipelines := &v1alpha1.ProductDeploymentPipelineList{}
@@ -168,18 +180,23 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 				Namespace: obj.Namespace,
 			},
 			Spec: v1alpha1.ProductDeploymentPipelineSpec{
-				Resource:      pipeline.Resource,
-				Localization:  pipeline.Localization,
-				Configuration: pipeline.Configuration,
-				TargetRole:    pipeline.TargetRole,
+				Resource:            pipeline.Resource,
+				Localization:        pipeline.Localization,
+				Configuration:       pipeline.Configuration,
+				TargetRole:          pipeline.TargetRole,
+				ComponentVersionRef: r.generateComponentVersionName(obj),
 			},
 		}
 
-		if err := controllerutil.SetControllerReference(obj, pobj, r.Scheme); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to set owner reference: %w", err)
-		}
+		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, pobj, func() error {
+			if pobj.ObjectMeta.CreationTimestamp.IsZero() {
+				if err := controllerutil.SetControllerReference(obj, pobj, r.Scheme); err != nil {
+					return fmt.Errorf("failed to set owner to pipeline object object: %w", err)
+				}
+			}
 
-		if err := r.Create(ctx, pobj); err != nil {
+			return nil
+		}); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to create pipeline object: %w", err)
 		}
 
@@ -194,6 +211,44 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 	return ctrl.Result{}, nil
 }
 
-const (
-	pipelineOwnerKey = ".metadata.controller"
-)
+func (r *ProductDeploymentReconciler) createOrUpdateComponentVersion(ctx context.Context, obj *v1alpha1.ProductDeployment) error {
+	cv := &ocmv1alpha1.ComponentVersion{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      r.generateComponentVersionName(obj),
+			Namespace: obj.Namespace,
+		},
+		Spec: ocmv1alpha1.ComponentVersionSpec{
+			Interval:  metav1.Duration{Duration: 10 * time.Minute}, //TODO: think about this
+			Component: obj.Spec.Component.Name,
+			Version: ocmv1alpha1.Version{
+				Semver: obj.Spec.Component.Version,
+			},
+			Repository: ocmv1alpha1.Repository{
+				URL: obj.Spec.Component.Registry.URL,
+			},
+			Verify: nil, // TODO: think about this
+			References: ocmv1alpha1.ReferencesConfig{
+				Expand: true,
+			},
+			ServiceAccountName: obj.Spec.ServiceAccountName,
+		},
+	}
+
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, cv, func() error {
+		if cv.ObjectMeta.CreationTimestamp.IsZero() {
+			if err := controllerutil.SetOwnerReference(obj, cv, r.Scheme); err != nil {
+				return fmt.Errorf("failed to set owner to sync object: %w", err)
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return fmt.Errorf("failed to create component version: %w", err)
+	}
+
+	return nil
+}
+
+func (r *ProductDeploymentReconciler) generateComponentVersionName(obj *v1alpha1.ProductDeployment) string {
+	return obj.Name + "component-version"
+}

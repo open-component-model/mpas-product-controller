@@ -22,6 +22,8 @@ type ProductDeploymentSpec struct {
 	Component replicationv1.Component `json:"component"`
 	// +required
 	Pipelines []Pipeline `json:"pipelines"`
+	// +required
+	ServiceAccountName string `json:"serviceAccountName"`
 }
 
 // ProductDeploymentStatus defines the observed state of ProductDeployment.
@@ -53,17 +55,9 @@ type ResourceReference struct {
 	ReferencePath []ocmmetav1.Identity `json:"referencePath,omitempty"`
 }
 
-// ValuesFile defines a path to a values file containing User configuration.
-type ValuesFile struct {
-	Path string `json:"path"`
-}
-
 // Configuration defines a list of rules to follow and an optional values file.
 type Configuration struct {
 	Rules ResourceReference `json:"rules"`
-
-	//+optional
-	ValuesFile ValuesFile `json:"valuesFile,omitempty"`
 }
 
 // TargetRole the role defining what targets are available to deploy to.

@@ -57,6 +57,19 @@ rules:
 - apiGroups:
   - delivery.ocm.software
   resources:
+  - configurations
+  - localizations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - delivery.ocm.software
+  resources:
   - snapshots
   verbs:
   - create
@@ -174,6 +187,20 @@ rules:
   - mpas.ocm.software
   resources:
   - projects
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - source.toolkit.fluxcd.io
+  resources:
+  - buckets
+  - gitrepositories
+  - ocirepositories
   verbs:
   - create
   - delete
