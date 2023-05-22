@@ -34,9 +34,9 @@ import (
 )
 
 var (
-	scheme           = runtime.NewScheme()
-	setupLog         = ctrl.Log.WithName("setup")
-	defaultNamespace = "mpas-system"
+	scheme                     = runtime.NewScheme()
+	setupLog                   = ctrl.Log.WithName("setup")
+	defaultMpasSystemNamespace = "mpas-system"
 )
 
 func init() {
@@ -55,7 +55,7 @@ func main() {
 	var enableLeaderElection bool
 	var probeAddr string
 	var ociRegistryAddr string
-	var namespace string
+	var mpasSystemNamespace string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -63,7 +63,7 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&ociRegistryAddr, "oci-registry-addr", ":5000", "The address of the OCI registry.")
-	flag.StringVar(&namespace, "namespace", defaultNamespace, "The namespace in which this controller is running in. This namespace is used to locate Project objects.")
+	flag.StringVar(&mpasSystemNamespace, "mpas-system-namespace", defaultMpasSystemNamespace, "The namespace in which this controller is running in. This namespace is used to locate Project objects.")
 
 	opts := zap.Options{
 		Development: true,
@@ -90,27 +90,26 @@ func main() {
 	snapshotWriter := snapshot.NewOCIWriter(mgr.GetClient(), cache, mgr.GetScheme())
 	ocmClient := ocm.NewClient(mgr.GetClient())
 	if err = (&controllers.ProductDeploymentGeneratorReconciler{
-		Client:         mgr.GetClient(),
-		Scheme:         mgr.GetScheme(),
-		OCMClient:      ocmClient,
-		SnapshotWriter: snapshotWriter,
-		Namespace:      namespace,
+		Client:              mgr.GetClient(),
+		Scheme:              mgr.GetScheme(),
+		OCMClient:           ocmClient,
+		SnapshotWriter:      snapshotWriter,
+		MpasSystemNamespace: mpasSystemNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ProductDeploymentGenerator")
 		os.Exit(1)
 	}
 	if err = (&controllers.ProductDeploymentReconciler{
-		Client:    mgr.GetClient(),
-		Scheme:    mgr.GetScheme(),
-		Namespace: namespace,
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ProductDeployment")
 		os.Exit(1)
 	}
 	if err = (&controllers.ProductDeploymentPipelineReconciler{
-		Client:    mgr.GetClient(),
-		Scheme:    mgr.GetScheme(),
-		Namespace: namespace,
+		Client:              mgr.GetClient(),
+		Scheme:              mgr.GetScheme(),
+		MpasSystemNamespace: mpasSystemNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ProductDeploymentPipeline")
 		os.Exit(1)

@@ -34,8 +34,7 @@ const (
 // ProductDeploymentReconciler reconciles a ProductDeployment object
 type ProductDeploymentReconciler struct {
 	client.Client
-	Scheme    *runtime.Scheme
-	Namespace string
+	Scheme *runtime.Scheme
 }
 
 // SetupWithManager sets up the controller with the Manager.

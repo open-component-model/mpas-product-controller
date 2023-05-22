@@ -32,11 +32,11 @@ import (
 	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 )
 
-// ProductDeploymentPipelineReconciler reconciles a ProductDeploymentPipeline object
+// ProductDeploymentPipelineReconciler reconciles a ProductDeploymentPipeline object.
 type ProductDeploymentPipelineReconciler struct {
 	client.Client
-	Scheme    *runtime.Scheme
-	Namespace string
+	Scheme              *runtime.Scheme
+	MpasSystemNamespace string
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -111,7 +111,7 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 	snapshotProvider = localization
 
 	projectList := &projectv1.ProjectList{}
-	if err := r.List(ctx, projectList, client.InNamespace(r.Namespace)); err != nil {
+	if err := r.List(ctx, projectList, client.InNamespace(r.MpasSystemNamespace)); err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to find project in namespace: %w", err)

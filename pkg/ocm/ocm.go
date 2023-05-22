@@ -183,7 +183,6 @@ func (c *Client) GetResourceData(cv ocm.ComponentVersionAccess, ref v1alpha1.Res
 	}
 	defer uncompressed.Close()
 
-	// This will be problematic with a 6 Gig large object when it's trying to read it all.
 	content, err := io.ReadAll(uncompressed)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read resource data: %w", err)
