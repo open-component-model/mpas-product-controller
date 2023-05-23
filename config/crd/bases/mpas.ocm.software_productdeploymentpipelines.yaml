@@ -393,27 +393,7 @@ spec:
                     description: TargetSpec defines the desired state of Target
                     properties:
                       access:
-                        description: Access defines any access information for the
-                          given Target.
-                        properties:
-                          secretRef:
-                            description: NamespacedObjectReference contains enough
-                              information to locate the referenced Kubernetes resource
-                              object in any namespace.
-                            properties:
-                              name:
-                                description: Name of the referent.
-                                type: string
-                              namespace:
-                                description: Namespace of the referent, when not specified
-                                  it acts as LocalObjectReference.
-                                type: string
-                            required:
-                            - name
-                            type: object
-                        required:
-                        - secretRef
-                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
                       type:
                         description: TargetType defines valid types for Targets.
                         type: string

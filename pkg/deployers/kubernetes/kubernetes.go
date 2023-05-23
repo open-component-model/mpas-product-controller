@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2022 SAP SE or an SAP affiliate company and Open Component Model contributors.
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package kubernetes
 
 import (
@@ -6,14 +10,17 @@ import (
 
 	kustomizev1beta2 "github.com/fluxcd/kustomize-controller/api/v1beta2"
 	"github.com/fluxcd/pkg/apis/meta"
-	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
-	"github.com/open-component-model/mpas-product-controller/pkg/deployers"
-	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
+	"gopkg.in/yaml.v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
+
+	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
+	"github.com/open-component-model/mpas-product-controller/pkg/deployers"
 )
 
 // Deployer can deploy Kubernetes type Targets.
@@ -53,6 +60,11 @@ func (d *Deployer) Deploy(ctx context.Context, obj *v1alpha1.ProductDeploymentPi
 		return fmt.Errorf("access needs to be defined for the kubernetes target type")
 	}
 
+	var kubernetesAccess v1alpha1.KubernetesAccess
+	if err := yaml.Unmarshal(target.Spec.Access.Raw, &kubernetesAccess); err != nil {
+		return fmt.Errorf("failed to parse Kubernetes access spec: %w", err)
+	}
+
 	snapshot := &ocmv1alpha1.Snapshot{}
 	if err := d.client.Get(ctx, types.NamespacedName{
 		Name:      obj.Status.SnapshotRef.Name,
@@ -84,11 +96,11 @@ func (d *Deployer) Deploy(ctx context.Context, obj *v1alpha1.ProductDeploymentPi
 			KustomizationTemplate: kustomizev1beta2.KustomizationSpec{
 				KubeConfig: &meta.KubeConfigReference{
 					SecretRef: meta.SecretKeyReference{
-						Name: target.Spec.Access.SecretRef.Name,
+						Name: kubernetesAccess.SecretRef.Name,
 					},
 				},
 				Prune:           true,
-				TargetNamespace: obj.Namespace, // for now, deploying namespace is the object's namespace ( aka project namespace )
+				TargetNamespace: kubernetesAccess.TargetNamespace,
 			},
 		},
 	}

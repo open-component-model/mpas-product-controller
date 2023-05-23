@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2022 SAP SE or an SAP affiliate company and Open Component Model contributors.
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package controllers
 
 import (
@@ -11,6 +15,7 @@ import (
 	"github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -119,11 +124,12 @@ func TestProductDeploymentPipelineReconciler(t *testing.T) {
 		},
 		Spec: mpasv1alpha1.TargetSpec{
 			Type: mpasv1alpha1.Kubernetes,
-			Access: &mpasv1alpha1.Access{
-				SecretRef: &meta.NamespacedObjectReference{
-					Name:      "kube-config",
-					Namespace: "mpas-system",
-				},
+			Access: &apiextensionsv1.JSON{
+				Raw: []byte(`secretRef:
+  name: kube-config
+  namespace: mpas-system
+targetNamespace: mpas-system
+`),
 			},
 		},
 	}

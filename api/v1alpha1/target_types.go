@@ -5,7 +5,7 @@
 package v1alpha1
 
 import (
-	"github.com/fluxcd/pkg/apis/meta"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -23,19 +23,14 @@ var (
 
 // TargetSpec defines the desired state of Target
 type TargetSpec struct {
-	//+required
+	// +required
 	Type TargetType `json:"type"`
-	//+optional
-	Access *Access `json:"access,omitempty"`
+	// +optional
+	Access *apiextensionsv1.JSON `json:"access,omitempty"`
 }
 
 // TargetStatus defines the observed state of Target
 type TargetStatus struct {
-}
-
-// Access defines any access information for the given Target.
-type Access struct {
-	SecretRef *meta.NamespacedObjectReference `json:"secretRef"`
 }
 
 //+kubebuilder:object:root=true
