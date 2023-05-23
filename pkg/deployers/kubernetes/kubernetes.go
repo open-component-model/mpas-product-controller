@@ -88,7 +88,7 @@ func (d *Deployer) Deploy(ctx context.Context, obj *v1alpha1.ProductDeploymentPi
 					},
 				},
 				Prune:           true,
-				TargetNamespace: obj.Namespace, //TODO: This needs to come from somewhere.
+				TargetNamespace: obj.Namespace, // for now, deploying namespace is the object's namespace ( aka project namespace )
 			},
 		},
 	}
