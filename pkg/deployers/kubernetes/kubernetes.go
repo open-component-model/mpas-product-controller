@@ -7,10 +7,11 @@ import (
 	kustomizev1beta2 "github.com/fluxcd/kustomize-controller/api/v1beta2"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
-	"github.com/open-component-model/mpas-product-controller/controllers/deployers"
+	"github.com/open-component-model/mpas-product-controller/pkg/deployers"
 	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
@@ -52,6 +53,21 @@ func (d *Deployer) Deploy(ctx context.Context, obj *v1alpha1.ProductDeploymentPi
 		return fmt.Errorf("access needs to be defined for the kubernetes target type")
 	}
 
+	snapshot := &ocmv1alpha1.Snapshot{}
+	if err := d.client.Get(ctx, types.NamespacedName{
+		Name:      obj.Status.SnapshotRef.Name,
+		Namespace: obj.Status.SnapshotRef.Namespace,
+	}, snapshot); err != nil {
+		return fmt.Errorf("failed to find snapshot: %w", err)
+	}
+
+	owners := snapshot.GetOwnerReferences()
+	if len(owners) != 1 {
+		return fmt.Errorf("expected exactly one owner for snapshot but got %d", len(owners))
+	}
+
+	owner := owners[0]
+
 	kustomization := &ocmv1alpha1.FluxDeployer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      obj.Name + "-kustomization",
@@ -60,9 +76,9 @@ func (d *Deployer) Deploy(ctx context.Context, obj *v1alpha1.ProductDeploymentPi
 		Spec: ocmv1alpha1.FluxDeployerSpec{
 			SourceRef: ocmv1alpha1.ObjectReference{
 				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-					Name:      obj.Status.SnapshotRef.Name,
-					Namespace: obj.Status.SnapshotRef.Namespace,
-					Kind:      "Snapshot",
+					Name:      owner.Name,
+					Namespace: obj.Namespace,
+					Kind:      owner.Kind,
 				},
 			},
 			KustomizationTemplate: kustomizev1beta2.KustomizationSpec{
@@ -71,14 +87,8 @@ func (d *Deployer) Deploy(ctx context.Context, obj *v1alpha1.ProductDeploymentPi
 						Name: target.Spec.Access.SecretRef.Name,
 					},
 				},
-				Prune: true,
-				SourceRef: kustomizev1beta2.CrossNamespaceSourceReference{
-					Kind:      "OCIRepository",
-					Name:      obj.Name + "-oci-repository", // TODO: Maybe get this from the generated oci repo.
-					Namespace: obj.Namespace,                // TODO: This is the same as the owner.
-				},
+				Prune:           true,
 				TargetNamespace: obj.Namespace, //TODO: This needs to come from somewhere.
-				Timeout:         nil,           // TODO: Probably need to set this together with retry.
 			},
 		},
 	}

@@ -10,7 +10,7 @@ import (
 
 	"github.com/fluxcd/source-controller/api/v1beta2"
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
-	"github.com/open-component-model/mpas-product-controller/controllers/deployers/kubernetes"
+	"github.com/open-component-model/mpas-product-controller/pkg/deployers/kubernetes"
 	"github.com/open-component-model/mpas-product-controller/pkg/ocm"
 	v1alpha12 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	"github.com/open-component-model/ocm-controller/pkg/oci"

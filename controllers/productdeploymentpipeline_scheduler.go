@@ -12,6 +12,7 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
+	"github.com/open-component-model/mpas-product-controller/pkg/deployers"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -21,7 +22,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	mpasv1alpha1 "github.com/open-component-model/mpas-product-controller/api/v1alpha1"
-	"github.com/open-component-model/mpas-product-controller/controllers/deployers"
 )
 
 // ProductDeploymentPipelineScheduler reconciles a ProductDeploymentPipeline object and schedules them.

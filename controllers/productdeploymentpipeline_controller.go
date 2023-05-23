@@ -15,7 +15,6 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	v1 "github.com/fluxcd/source-controller/api/v1"
-	"github.com/fluxcd/source-controller/api/v1beta2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -141,19 +140,6 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 
 	if snapshotProvider == nil {
 		return ctrl.Result{}, fmt.Errorf("no artifact provider after localization and configuration")
-	}
-
-	if err := r.createOrUpdateOCIRepository(ctx, obj, snapshotProvider); err != nil {
-		if apierrors.IsNotFound(err) {
-			logger.Info("waiting for artifact to be available from either configuration or localization for pipeline", "pipeline", obj.Name)
-
-			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
-		}
-
-		err := fmt.Errorf("failed to create oci repository: %w", err)
-		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.CreateOCIRepositoryFailedReason, err.Error())
-
-		return ctrl.Result{}, err
 	}
 
 	obj.Status.SnapshotRef = &meta.NamespacedObjectReference{
@@ -309,41 +295,4 @@ func (r *ProductDeploymentPipelineReconciler) createOrUpdateLocalization(ctx con
 	}
 
 	return localization, nil
-}
-
-func (r *ProductDeploymentPipelineReconciler) createOrUpdateOCIRepository(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline, snapshotProvider ocmv1alpha1.SnapshotWriter) error {
-	snapshot := &ocmv1alpha1.Snapshot{}
-	if err := r.Get(ctx, types.NamespacedName{Name: snapshotProvider.GetSnapshotName(), Namespace: obj.Namespace}, snapshot); err != nil {
-		return fmt.Errorf("failed to find snapshot: %w", err)
-	}
-
-	url := strings.ReplaceAll(snapshot.Status.RepositoryURL, "http", "oci")
-	repo := &v1beta2.OCIRepository{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      obj.Name + "-oci-repository",
-			Namespace: obj.Namespace,
-		},
-		Spec: v1beta2.OCIRepositorySpec{
-			URL: url,
-			Reference: &v1beta2.OCIRepositoryRef{
-				Tag: snapshot.Spec.Tag,
-			},
-			Interval: metav1.Duration{Duration: 10 * time.Minute},
-			Insecure: true,
-		},
-	}
-
-	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, repo, func() error {
-		if repo.ObjectMeta.CreationTimestamp.IsZero() {
-			if err := controllerutil.SetOwnerReference(obj, repo, r.Scheme); err != nil {
-				return fmt.Errorf("failed to set owner to oci repository object: %w", err)
-			}
-		}
-
-		return nil
-	}); err != nil {
-		return fmt.Errorf("failed to create oci repository: %w", err)
-	}
-
-	return nil
 }
