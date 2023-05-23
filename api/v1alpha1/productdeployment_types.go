@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	ProductDeploymentNameKey = "product-deployment-name"
-	ProductDeploymentKind    = "ProductDeployment"
+	ProductDeploymentNameKey       = "product-deployment-name"
+	ProductDeploymentKind          = "ProductDeployment"
+	ProductDeploymentOwnerLabelKey = "mpas.ocm.system/product-deployment"
 )
 
 // ProductDeploymentSpec defines the desired state of ProductDeployment.

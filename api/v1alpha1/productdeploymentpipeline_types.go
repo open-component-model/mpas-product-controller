@@ -41,6 +41,10 @@ type ProductDeploymentPipelineStatus struct {
 	// SelectedTarget defines the target in which this pipeline was deployed into.
 	// +optional
 	SelectedTarget *Target `json:"target,omitempty"`
+
+	// SnapshotRef references the last snapshot that this pipeline has eventually produced once completed.
+	// +optional
+	SnapshotRef *meta.NamespacedObjectReference `json:"snapshotRef,omitempty"`
 }
 
 // GetConditions returns the conditions of the ComponentVersion.

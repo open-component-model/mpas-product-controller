@@ -288,7 +288,12 @@ func TestTargetSelection(t *testing.T) {
 
 			fakeClient := env.FakeKubeClient(WithObjets(tc.targets...))
 
-			target, err := FilterTarget(context.Background(), fakeClient, tc.role, "default")
+			r := &ProductDeploymentPipelineScheduler{
+				Client:              fakeClient,
+				Scheme:              env.scheme,
+				MpasSystemNamespace: "mpas-system",
+			}
+			target, err := r.FilterTarget(context.Background(), tc.role, "default")
 			if tc.err != nil {
 				require.ErrorContains(t, err, tc.err.Error())
 			} else {

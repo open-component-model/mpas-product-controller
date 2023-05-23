@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	kustomizev1beta2 "github.com/fluxcd/kustomize-controller/api/v1beta2"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
@@ -144,32 +143,22 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, fmt.Errorf("no artifact provider after localization and configuration")
 	}
 
-	// Create Flux OCI
-	if err := r.createOrUpdateFluxOCIRepository(ctx, obj, snapshotProvider); err != nil {
+	if err := r.createOrUpdateOCIRepository(ctx, obj, snapshotProvider); err != nil {
 		if apierrors.IsNotFound(err) {
 			logger.Info("waiting for artifact to be available from either configuration or localization for pipeline", "pipeline", obj.Name)
 
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
+
 		err := fmt.Errorf("failed to create oci repository: %w", err)
 		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.CreateOCIRepositoryFailedReason, err.Error())
 
 		return ctrl.Result{}, err
 	}
 
-	// if target Kubernetes -> Create a Kustomize and point it at the OCI Repository.
-	if obj.Spec.TargetRole.Type == mpasv1alpha1.Kubernetes {
-		target, err := FilterTarget(ctx, r.Client, obj.Spec.TargetRole, obj.Namespace)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to select a target with the given criteria: %w", err)
-		}
-
-		// Update the selected target.
-		obj.Status.SelectedTarget = &target
-
-		if err := r.createOrUpdateKustomization(ctx, obj, target); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to generate target kustomization: %w", err)
-		}
+	obj.Status.SnapshotRef = &meta.NamespacedObjectReference{
+		Name:      snapshotProvider.GetSnapshotName(),
+		Namespace: obj.Namespace,
 	}
 
 	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
@@ -322,7 +311,7 @@ func (r *ProductDeploymentPipelineReconciler) createOrUpdateLocalization(ctx con
 	return localization, nil
 }
 
-func (r *ProductDeploymentPipelineReconciler) createOrUpdateFluxOCIRepository(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline, snapshotProvider ocmv1alpha1.SnapshotWriter) error {
+func (r *ProductDeploymentPipelineReconciler) createOrUpdateOCIRepository(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline, snapshotProvider ocmv1alpha1.SnapshotWriter) error {
 	snapshot := &ocmv1alpha1.Snapshot{}
 	if err := r.Get(ctx, types.NamespacedName{Name: snapshotProvider.GetSnapshotName(), Namespace: obj.Namespace}, snapshot); err != nil {
 		return fmt.Errorf("failed to find snapshot: %w", err)
@@ -354,48 +343,6 @@ func (r *ProductDeploymentPipelineReconciler) createOrUpdateFluxOCIRepository(ct
 		return nil
 	}); err != nil {
 		return fmt.Errorf("failed to create oci repository: %w", err)
-	}
-
-	return nil
-}
-
-func (r *ProductDeploymentPipelineReconciler) createOrUpdateKustomization(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline, target mpasv1alpha1.Target) error {
-	if target.Spec.Access == nil {
-		return fmt.Errorf("access needs to be defined for the kubernetes target type")
-	}
-
-	kustomization := &kustomizev1beta2.Kustomization{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      obj.Name + "-kustomization",
-			Namespace: obj.Namespace,
-		},
-		Spec: kustomizev1beta2.KustomizationSpec{
-			KubeConfig: &meta.KubeConfigReference{
-				SecretRef: meta.SecretKeyReference{
-					Name: target.Spec.Access.SecretRef.Name,
-				},
-			},
-			Prune: true,
-			SourceRef: kustomizev1beta2.CrossNamespaceSourceReference{
-				Kind:      "OCIRepository",
-				Name:      obj.Name + "-oci-repository", // TODO: Maybe get this from the generated oci repo.
-				Namespace: obj.Namespace,                // TODO: This is the same as the owner.
-			},
-			TargetNamespace: obj.Namespace, //TODO: This needs to come from somewhere.
-			Timeout:         nil,           // TODO: Probably need to set this together with retry.
-		},
-	}
-
-	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, kustomization, func() error {
-		if kustomization.ObjectMeta.CreationTimestamp.IsZero() {
-			if err := controllerutil.SetOwnerReference(obj, kustomization, r.Scheme); err != nil {
-				return fmt.Errorf("failed to set owner to kustomization object: %w", err)
-			}
-		}
-
-		return nil
-	}); err != nil {
-		return fmt.Errorf("failed to create kustomization: %w", err)
 	}
 
 	return nil

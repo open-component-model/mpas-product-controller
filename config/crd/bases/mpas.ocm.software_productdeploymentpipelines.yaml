@@ -357,6 +357,20 @@ spec:
                 description: ObservedGeneration is the last reconciled generation.
                 format: int64
                 type: integer
+              snapshotRef:
+                description: SnapshotRef references the last snapshot that this pipeline
+                  has eventually produced once completed.
+                properties:
+                  name:
+                    description: Name of the referent.
+                    type: string
+                  namespace:
+                    description: Namespace of the referent, when not specified it
+                      acts as LocalObjectReference.
+                    type: string
+                required:
+                - name
+                type: object
               target:
                 description: SelectedTarget defines the target in which this pipeline
                   was deployed into.

@@ -10,6 +10,7 @@ import (
 
 	"github.com/fluxcd/source-controller/api/v1beta2"
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
+	"github.com/open-component-model/mpas-product-controller/controllers/deployers/kubernetes"
 	"github.com/open-component-model/mpas-product-controller/pkg/ocm"
 	v1alpha12 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	"github.com/open-component-model/ocm-controller/pkg/oci"
@@ -114,6 +115,18 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ProductDeploymentPipeline")
 		os.Exit(1)
 	}
+
+	kubeDeployer := kubernetes.NewDeployer(mgr.GetClient(), mgr.GetScheme(), nil)
+	if err = (&controllers.ProductDeploymentPipelineScheduler{
+		Client:              mgr.GetClient(),
+		Scheme:              mgr.GetScheme(),
+		MpasSystemNamespace: mpasSystemNamespace,
+		Deployer:            kubeDeployer,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create scheduler", "scheduler", "ProductDeploymentScheduler")
+		os.Exit(1)
+	}
+
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

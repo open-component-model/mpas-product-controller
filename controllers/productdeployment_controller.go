@@ -178,6 +178,9 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      pipeline.Name,
 				Namespace: obj.Namespace,
+				Labels: map[string]string{
+					v1alpha1.ProductDeploymentOwnerLabelKey: obj.Name,
+				},
 			},
 			Spec: v1alpha1.ProductDeploymentPipelineSpec{
 				Resource:            pipeline.Resource,

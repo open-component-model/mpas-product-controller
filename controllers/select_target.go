@@ -13,7 +13,7 @@ import (
 )
 
 // FilterTarget selects a target based on the provided filtering options.
-func FilterTarget(ctx context.Context, c client.Client, role v1alpha1.TargetRole, namespace string) (v1alpha1.Target, error) {
+func (r *ProductDeploymentPipelineScheduler) FilterTarget(ctx context.Context, role v1alpha1.TargetRole, namespace string) (v1alpha1.Target, error) {
 	targetList := &v1alpha1.TargetList{}
 
 	m, err := v1.LabelSelectorAsSelector(&role.Selector)
@@ -21,9 +21,9 @@ func FilterTarget(ctx context.Context, c client.Client, role v1alpha1.TargetRole
 		return v1alpha1.Target{}, fmt.Errorf("failed to parse label selectors to map: %w", err)
 	}
 
-	// we can't use client.MatchingFields for spec.type, because we don't have spec.type registered.
-	// maybe we should and the above range could be avoided?
-	if err := c.List(ctx, targetList, client.InNamespace(namespace), client.MatchingLabelsSelector{
+	// We can't use client.MatchingFields for spec.type since we don't have a controller for Target
+	// and thus, we can't index the type field.
+	if err := r.List(ctx, targetList, client.InNamespace(namespace), client.MatchingLabelsSelector{
 		Selector: m,
 	}); err != nil {
 		return v1alpha1.Target{}, fmt.Errorf("failed to list targets: %w", err)

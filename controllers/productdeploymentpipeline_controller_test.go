@@ -214,5 +214,4 @@ func TestProductDeploymentPipelineReconciler(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, conditions.IsTrue(obj, meta.ReadyCondition))
-	assert.Equal(t, "kube-target", obj.Status.SelectedTarget.Name)
 }
