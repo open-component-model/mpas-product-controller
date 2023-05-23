@@ -13,7 +13,6 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
-	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -25,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
+	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 )
 
 const (
