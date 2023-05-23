@@ -5,21 +5,25 @@ import (
 	"testing"
 	"time"
 
+	kustomizev1beta2 "github.com/fluxcd/kustomize-controller/api/v1beta2"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
-	alpha1 "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
-	mpasv1alpha1 "github.com/open-component-model/mpas-product-controller/api/v1alpha1"
-	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
-	"github.com/open-component-model/ocm-controller/api/v1alpha1"
-	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
-	"github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/versions/ocm.software/v3alpha1"
-	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
+	"github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	alpha1 "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
+	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
+	"github.com/open-component-model/ocm-controller/api/v1alpha1"
+	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
+	"github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/versions/ocm.software/v3alpha1"
+	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
+
+	mpasv1alpha1 "github.com/open-component-model/mpas-product-controller/api/v1alpha1"
 )
 
 func TestProductDeploymentPipelineReconciler(t *testing.T) {
@@ -91,19 +95,6 @@ func TestProductDeploymentPipelineReconciler(t *testing.T) {
 					},
 				},
 			},
-			Configuration: mpasv1alpha1.Configuration{
-				Rules: mpasv1alpha1.ResourceReference{
-					ElementMeta: v3alpha1.ElementMeta{
-						Name:    "config",
-						Version: "0.0.1",
-					},
-					ReferencePath: []ocmmetav1.Identity{
-						{
-							"name": "config",
-						},
-					},
-				},
-			},
 			TargetRole: mpasv1alpha1.TargetRole{
 				Type: mpasv1alpha1.Kubernetes,
 				Selector: metav1.LabelSelector{
@@ -128,6 +119,12 @@ func TestProductDeploymentPipelineReconciler(t *testing.T) {
 		},
 		Spec: mpasv1alpha1.TargetSpec{
 			Type: mpasv1alpha1.Kubernetes,
+			Access: &mpasv1alpha1.Access{
+				SecretRef: &meta.NamespacedObjectReference{
+					Name:      "kube-config",
+					Namespace: "mpas-system",
+				},
+			},
 		},
 	}
 
@@ -144,10 +141,60 @@ func TestProductDeploymentPipelineReconciler(t *testing.T) {
 				Name:      "test-repository",
 				Namespace: "mpas-system",
 			},
+			Inventory: &projectv1.ResourceInventory{
+				Entries: []projectv1.ResourceRef{
+					{
+						// in the format '<namespace>_<name>_<group>_<kind>'.
+						ID:      "mpas-system_repo_v1alpha1_GitRepository",
+						Version: "v0.0.1",
+					},
+				},
+			},
+		},
+	}
+	snapshot := &v1alpha1.Snapshot{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      obj.Name + "-localization-snapshot",
+			Namespace: "mpas-system",
+		},
+		Spec:   v1alpha1.SnapshotSpec{},
+		Status: v1alpha1.SnapshotStatus{},
+	}
+	localization := &v1alpha1.Localization{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      obj.Name + "-localization",
+			Namespace: obj.Namespace,
+		},
+		Spec: v1alpha1.MutationSpec{
+			Interval: metav1.Duration{Duration: 10 * time.Minute},
+			SourceRef: v1alpha1.ObjectReference{
+				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+					Kind:      "ComponentVersion",
+					Name:      obj.Spec.ComponentVersionRef,
+					Namespace: obj.Namespace,
+				},
+			},
+			ConfigRef: &v1alpha1.ObjectReference{
+				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+					Kind:      "ComponentVersion",
+					Name:      obj.Spec.ComponentVersionRef,
+					Namespace: obj.Namespace,
+				},
+			},
+		},
+		Status: v1alpha1.MutationStatus{
+			LatestSnapshotDigest: "digest",
+			SnapshotName:         snapshot.Name,
 		},
 	}
 
-	fakeClient := env.FakeKubeClient(WithAddToScheme(v1alpha1.AddToScheme), WithAddToScheme(projectv1.AddToScheme), WithObjets(project, owner, obj, cv, target))
+	fakeClient := env.FakeKubeClient(
+		WithAddToScheme(v1alpha1.AddToScheme),
+		WithAddToScheme(projectv1.AddToScheme),
+		WithAddToScheme(v1beta2.AddToScheme),
+		WithAddToScheme(kustomizev1beta2.AddToScheme),
+		WithObjets(project, owner, obj, cv, target, snapshot, localization),
+	)
 
 	mgr := &ProductDeploymentPipelineReconciler{
 		Client:              fakeClient,
@@ -167,4 +214,5 @@ func TestProductDeploymentPipelineReconciler(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.True(t, conditions.IsTrue(obj, meta.ReadyCondition))
+	assert.Equal(t, "kube-target", obj.Status.SelectedTarget.Name)
 }

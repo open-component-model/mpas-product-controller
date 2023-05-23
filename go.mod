@@ -14,7 +14,7 @@ require (
 	github.com/fluxcd/pkg/runtime v0.35.0
 	github.com/fluxcd/source-controller/api v1.0.0-rc.3
 	github.com/open-component-model/git-controller v0.4.0
-	github.com/open-component-model/mpas-project-controller v0.1.0
+	github.com/open-component-model/mpas-project-controller v0.1.1-0.20230523081936-3f7e7521eb8d
 	github.com/open-component-model/ocm v0.3.0-rc.1.0.20230509133031-81dc63e1ab96
 	github.com/open-component-model/ocm-controller v0.8.1
 	github.com/open-component-model/replication-controller v0.2.1-0.20230420172740-670e1238a8c7
