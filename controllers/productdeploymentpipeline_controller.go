@@ -142,6 +142,12 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, fmt.Errorf("no artifact provider after localization and configuration")
 	}
 
+	if snapshotProvider.GetSnapshotName() == "" {
+		logger.Info("snapshot hasn't been produced yet, requeuing pipeline", "pipeline", obj.Name)
+
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
 	obj.Status.SnapshotRef = &meta.NamespacedObjectReference{
 		Name:      snapshotProvider.GetSnapshotName(),
 		Namespace: obj.Namespace,

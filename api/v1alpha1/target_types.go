@@ -14,11 +14,11 @@ type TargetType string
 
 var (
 	// Kubernetes defines a Kubernetes target type that uses a KubeConfig for target access.
-	Kubernetes TargetType = "Kubernetes"
+	Kubernetes TargetType = "kubernetes"
 	// SSH defines a remote machine target type that uses SSH access for target access.
-	SSH TargetType = "SSH"
+	SSH TargetType = "ssh"
 	// OCIRepository defines an oci repository target type that uses secrets for target access.
-	OCIRepository TargetType = "OCIRepository"
+	OCIRepository TargetType = "ocirepository"
 )
 
 // TargetSpec defines the desired state of Target

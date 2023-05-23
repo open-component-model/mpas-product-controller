@@ -45,19 +45,6 @@ targetNamespace: new-namespace
 			Name:      "test-snapshot",
 			Namespace: "mpas-system",
 		},
-		Spec: ocmv1alpha1.SnapshotSpec{
-			Identity: nil,
-			Digest:   "",
-			Tag:      "",
-			Suspend:  false,
-		},
-		Status: ocmv1alpha1.SnapshotStatus{
-			Conditions:           nil,
-			LastReconciledDigest: "",
-			LastReconciledTag:    "",
-			RepositoryURL:        "",
-			ObservedGeneration:   0,
-		},
 	}
 
 	err := controllerutil.SetOwnerReference(configuration, snapshot, env.scheme)
@@ -69,7 +56,10 @@ targetNamespace: new-namespace
 			Namespace: "mpas-system",
 		},
 		Status: v1alpha1.ProductDeploymentPipelineStatus{
-			SelectedTarget: kubeTarget,
+			SelectedTargetRef: &meta.NamespacedObjectReference{
+				Name:      kubeTarget.Name,
+				Namespace: kubeTarget.Namespace,
+			},
 			SnapshotRef: &meta.NamespacedObjectReference{
 				Name:      snapshot.Name,
 				Namespace: "mpas-system",

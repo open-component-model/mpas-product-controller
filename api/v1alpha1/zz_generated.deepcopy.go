@@ -340,10 +340,10 @@ func (in *ProductDeploymentPipelineStatus) DeepCopyInto(out *ProductDeploymentPi
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
-	if in.SelectedTarget != nil {
-		in, out := &in.SelectedTarget, &out.SelectedTarget
-		*out = new(Target)
-		(*in).DeepCopyInto(*out)
+	if in.SelectedTargetRef != nil {
+		in, out := &in.SelectedTargetRef, &out.SelectedTargetRef
+		*out = new(meta.NamespacedObjectReference)
+		**out = **in
 	}
 	if in.SnapshotRef != nil {
 		in, out := &in.SnapshotRef, &out.SnapshotRef

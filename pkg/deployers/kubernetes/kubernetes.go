@@ -42,10 +42,16 @@ func NewDeployer(client client.Client, scheme *runtime.Scheme, next deployers.De
 var _ deployers.Deployer = &Deployer{}
 
 func (d *Deployer) Deploy(ctx context.Context, obj *v1alpha1.ProductDeploymentPipeline) error {
-	target := obj.Status.SelectedTarget
+	if obj.Status.SelectedTargetRef == nil {
+		return fmt.Errorf("pipeline has no selected target")
+	}
 
-	if target == nil {
-		return fmt.Errorf("selected target on object cannot be empty")
+	target := &v1alpha1.Target{}
+	if err := d.client.Get(ctx, types.NamespacedName{
+		Name:      obj.Status.SelectedTargetRef.Name,
+		Namespace: obj.Status.SelectedTargetRef.Namespace,
+	}, target); err != nil {
+		return fmt.Errorf("failed to find referenced target object: %w", err)
 	}
 
 	if target.Spec.Type != v1alpha1.Kubernetes {
@@ -94,15 +100,18 @@ func (d *Deployer) Deploy(ctx context.Context, obj *v1alpha1.ProductDeploymentPi
 				},
 			},
 			KustomizationTemplate: kustomizev1beta2.KustomizationSpec{
-				KubeConfig: &meta.KubeConfigReference{
-					SecretRef: meta.SecretKeyReference{
-						Name: kubernetesAccess.SecretRef.Name,
-					},
-				},
 				Prune:           true,
 				TargetNamespace: kubernetesAccess.TargetNamespace,
 			},
 		},
+	}
+
+	if kubernetesAccess.SecretRef != nil {
+		kustomization.Spec.KustomizationTemplate.KubeConfig = &meta.KubeConfigReference{
+			SecretRef: meta.SecretKeyReference{
+				Name: kubernetesAccess.SecretRef.Name,
+			},
+		}
 	}
 
 	if _, err := controllerutil.CreateOrUpdate(ctx, d.client, kustomization, func() error {

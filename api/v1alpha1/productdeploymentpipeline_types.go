@@ -40,7 +40,7 @@ type ProductDeploymentPipelineStatus struct {
 
 	// SelectedTarget defines the target in which this pipeline was deployed into.
 	// +optional
-	SelectedTarget *Target `json:"target,omitempty"`
+	SelectedTargetRef *meta.NamespacedObjectReference `json:"targetRef,omitempty"`
 
 	// SnapshotRef references the last snapshot that this pipeline has eventually produced once completed.
 	// +optional

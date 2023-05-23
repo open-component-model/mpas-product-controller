@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
@@ -56,10 +57,10 @@ func (r *ProductDeploymentPipelineScheduler) Reconcile(ctx context.Context, req 
 		return ctrl.Result{}, fmt.Errorf("failed to find pipeline deployment object: %w", err)
 	}
 
-	if !conditions.IsReady(obj) || obj.Status.SnapshotRef == nil {
+	if !conditions.IsReady(obj) || obj.Status.SnapshotRef == nil || obj.Status.SnapshotRef.Name == "" {
 		logger.Info("pipeline not ready yet to be scheduler")
 
-		return ctrl.Result{}, nil
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	objPatcher := patch.NewSerialPatcher(obj, r.Client)
@@ -81,7 +82,7 @@ func (r *ProductDeploymentPipelineScheduler) Reconcile(ctx context.Context, req 
 		}
 	}()
 
-	target, err := r.FilterTarget(ctx, obj.Spec.TargetRole, obj.Namespace)
+	target, err := r.FilterTarget(ctx, obj.Spec.TargetRole, r.MpasSystemNamespace)
 	if err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.PipelineDeploymentFailedReason, err.Error())
 
@@ -89,7 +90,10 @@ func (r *ProductDeploymentPipelineScheduler) Reconcile(ctx context.Context, req 
 	}
 
 	// Update the selected target.
-	obj.Status.SelectedTarget = &target
+	obj.Status.SelectedTargetRef = &meta.NamespacedObjectReference{
+		Name:      target.Name,
+		Namespace: target.Namespace,
+	}
 
 	if err := r.Deployer.Deploy(ctx, obj); err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.PipelineDeploymentFailedReason, err.Error())
