@@ -26,9 +26,10 @@ func TestDeploy(t *testing.T) {
 		Spec: v1alpha1.TargetSpec{
 			Type: v1alpha1.Kubernetes,
 			Access: &apiextensionsv1.JSON{
-				Raw: []byte(`secretRef:
-  name: secret
-targetNamespace: new-namespace
+				Raw: []byte(`access:
+  secretRef:
+    name: secret
+  targetNamespace: new-namespace
 `),
 			},
 		},
