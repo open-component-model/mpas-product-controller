@@ -6,6 +6,7 @@ package kubernetes
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/fluxcd/pkg/apis/meta"
@@ -18,6 +19,16 @@ import (
 )
 
 func TestDeploy(t *testing.T) {
+	access := &v1alpha1.KubernetesAccess{
+		SecretRef: &meta.NamespacedObjectReference{
+			Name: "secret-name",
+		},
+		TargetNamespace: "mpas-sample-project",
+	}
+
+	data, err := json.Marshal(access)
+	require.NoError(t, err)
+
 	kubeTarget := &v1alpha1.Target{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-kube-target",
@@ -26,11 +37,7 @@ func TestDeploy(t *testing.T) {
 		Spec: v1alpha1.TargetSpec{
 			Type: v1alpha1.Kubernetes,
 			Access: &apiextensionsv1.JSON{
-				Raw: []byte(`access:
-  secretRef:
-    name: secret
-  targetNamespace: new-namespace
-`),
+				Raw: data,
 			},
 		},
 	}
@@ -48,7 +55,7 @@ func TestDeploy(t *testing.T) {
 		},
 	}
 
-	err := controllerutil.SetOwnerReference(configuration, snapshot, env.scheme)
+	err = controllerutil.SetOwnerReference(configuration, snapshot, env.scheme)
 	require.NoError(t, err)
 
 	obj := &v1alpha1.ProductDeploymentPipeline{
