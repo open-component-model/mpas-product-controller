@@ -343,7 +343,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx conte
 		ServiceAccountName: obj.Spec.ServiceAccountName,
 	}
 
-	values := make(map[string]map[string]string)
+	values := make(map[string]map[string]any)
 
 	for _, p := range prodDesc.Spec.Pipelines {
 		pipe, err := r.createProductPipeline(prodDesc, p, cv, values)
@@ -371,7 +371,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx conte
 
 // createProductPipeline takes a pipeline description and builds up all the Kubernetes objects that are needed
 // for that resource.
-func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(description v1alpha1.ProductDescription, p v1alpha1.ProductDescriptionPipeline, cv ocm.ComponentVersionAccess, values map[string]map[string]string) (v1alpha1.Pipeline, error) {
+func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(description v1alpha1.ProductDescription, p v1alpha1.ProductDescriptionPipeline, cv ocm.ComponentVersionAccess, values map[string]map[string]any) (v1alpha1.Pipeline, error) {
 	// TODO: Select a target role from the based on the target selector.
 	var targetRole *v1alpha1.TargetRole
 
