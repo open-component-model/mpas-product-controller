@@ -7,6 +7,8 @@ package controllers
 import (
 	"testing"
 
+	gitv1alpha1delivery "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
+	gitv1alpha1mpas "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
 	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	v1alpha12 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
@@ -64,6 +66,8 @@ func TestMain(m *testing.M) {
 	_ = v1alpha12.AddToScheme(scheme)
 	_ = projectv1.AddToScheme(scheme)
 	_ = replicationv1.AddToScheme(scheme)
+	_ = gitv1alpha1delivery.AddToScheme(scheme)
+	_ = gitv1alpha1mpas.AddToScheme(scheme)
 
 	env = &testEnv{
 		scheme: scheme,

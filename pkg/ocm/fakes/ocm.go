@@ -23,9 +23,9 @@ type getProductDescriptionReturnValues struct {
 }
 
 type MockOCM struct {
-	getResourceDataCallCount  int
-	getResourceDataReturns    map[int]getResourceDataReturnValues
-	getResourceDataCalledWith [][]any
+	getResourceDataCallCount      int
+	getResourceDataReturnsForName map[string]getResourceDataReturnValues
+	getResourceDataCalledWith     [][]any
 
 	getComponentVersionMap        map[string]ocm.ComponentVersionAccess
 	getComponentVersionErr        error
@@ -51,6 +51,7 @@ func (m *MockOCM) GetComponentVersionReturnsForName(name string, cva ocm.Compone
 	if m.getComponentVersionMap == nil {
 		m.getComponentVersionMap = make(map[string]ocm.ComponentVersionAccess)
 	}
+
 	m.getComponentVersionMap[name] = cva
 	m.getComponentVersionErr = err
 }
@@ -67,6 +68,7 @@ func (m *MockOCM) GetProductDescription(ctx context.Context, octx ocm.Context, c
 	if _, ok := m.getProductDescriptionDataReturns[m.getResourceDataCallCount]; !ok {
 		return nil, fmt.Errorf("unexpected number of calls; not enough return values have been configured; call count %d", m.getProductDescriptionVersionCallCount)
 	}
+
 	m.getProductDescriptionDataCalledWith = append(m.getProductDescriptionDataCalledWith, []any{cv})
 	result := m.getProductDescriptionDataReturns[m.getProductDescriptionVersionCallCount]
 	m.getProductDescriptionVersionCallCount++
@@ -85,33 +87,35 @@ func (m *MockOCM) GetProductDescriptionReturns(data []byte, err error) {
 	}
 }
 
-func (m *MockOCM) GetResourceDataReturns(data []byte, err error) {
-	if m.getResourceDataReturns == nil {
-		m.getResourceDataReturns = make(map[int]getResourceDataReturnValues)
+func (m *MockOCM) GetResourceDataReturns(name string, data []byte, err error) {
+	if m.getResourceDataReturnsForName == nil {
+		m.getResourceDataReturnsForName = make(map[string]getResourceDataReturnValues)
 	}
-	m.getResourceDataReturns[0] = getResourceDataReturnValues{
+
+	m.getResourceDataReturnsForName[name] = getResourceDataReturnValues{
 		data: data,
 		err:  err,
 	}
 }
 
-func (m *MockOCM) GetResourceDataReturnsOnCall(n int, data []byte, err error) {
-	if m.getResourceDataReturns == nil {
-		m.getResourceDataReturns = make(map[int]getResourceDataReturnValues, 0)
+func (m *MockOCM) GetResourceDataReturnsOnCall(name string, data []byte, err error) {
+	if m.getResourceDataReturnsForName == nil {
+		m.getResourceDataReturnsForName = make(map[string]getResourceDataReturnValues, 0)
 	}
 
-	m.getResourceDataReturns[n] = getResourceDataReturnValues{
+	m.getResourceDataReturnsForName[name] = getResourceDataReturnValues{
 		data: data,
 		err:  err,
 	}
 }
 
 func (m *MockOCM) GetResourceData(cv ocm.ComponentVersionAccess, ref v1alpha1.ResourceReference) ([]byte, error) {
-	if _, ok := m.getResourceDataReturns[m.getResourceDataCallCount]; !ok {
-		return nil, fmt.Errorf("unexpected number of calls; not enough return values have been configured; call count %d", m.getResourceDataCallCount)
+	if _, ok := m.getResourceDataReturnsForName[ref.Name]; !ok {
+		return nil, fmt.Errorf("unexpected number of calls to get resource for ref %s; not enough return values have been configured; call count %d", ref.Name, m.getResourceDataCallCount)
 	}
+
 	m.getResourceDataCalledWith = append(m.getResourceDataCalledWith, []any{ref})
-	result := m.getResourceDataReturns[m.getResourceDataCallCount]
+	result := m.getResourceDataReturnsForName[ref.Name]
 	m.getResourceDataCallCount++
 	return result.data, result.err
 }

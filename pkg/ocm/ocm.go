@@ -10,9 +10,6 @@ import (
 	"io"
 
 	"github.com/containers/image/v5/pkg/compression"
-	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
-	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
-	"github.com/open-component-model/ocm/pkg/contexts/ocm/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -21,7 +18,11 @@ import (
 	"github.com/open-component-model/ocm/pkg/contexts/credentials/repositories/dockerconfig"
 	"github.com/open-component-model/ocm/pkg/contexts/ocm"
 	"github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc"
+	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
 	"github.com/open-component-model/ocm/pkg/contexts/ocm/repositories/ocireg"
+	"github.com/open-component-model/ocm/pkg/contexts/ocm/utils"
+
+	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
 )
 
 const (
