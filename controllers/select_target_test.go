@@ -297,7 +297,7 @@ func TestTargetSelection(t *testing.T) {
 				Scheme:              env.scheme,
 				MpasSystemNamespace: "mpas-system",
 			}
-			target, err := r.FilterTarget(context.Background(), tc.role, "default")
+			target, err := r.SelectTarget(context.Background(), tc.role, "default")
 			if tc.err != nil {
 				require.ErrorContains(t, err, tc.err.Error())
 			} else {
