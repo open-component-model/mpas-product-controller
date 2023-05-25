@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	ProductDeploymentNameKey = "product-deployment-name"
-	ProductDeploymentKind    = "ProductDeployment"
+	ProductDeploymentNameKey       = "product-deployment-name"
+	ProductDeploymentKind          = "ProductDeployment"
+	ProductDeploymentOwnerLabelKey = "mpas.ocm.system/product-deployment"
 )
 
 // ProductDeploymentSpec defines the desired state of ProductDeployment.
@@ -62,7 +63,7 @@ type Configuration struct {
 
 // TargetRole the role defining what targets are available to deploy to.
 type TargetRole struct {
-	Type     string               `json:"type"`
+	Type     TargetType           `json:"type"`
 	Selector metav1.LabelSelector `json:"selector"`
 }
 

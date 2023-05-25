@@ -40,6 +40,9 @@ const (
 	// CreateOCIRepositoryFailedReason is used when we fail to create an OCIRepository object in the cluster.
 	CreateOCIRepositoryFailedReason = "CreateOCIRepositoryFailed"
 
-	// PatchFailedReason is used when we fail to Patch the pipeline object in the cluster.
-	PatchFailedReason = "PatchFailedReasonFailed"
+	// PipelineDeploymentFailedReason is used when we fail to deploy a pipeline.
+	PipelineDeploymentFailedReason = "PipelineDeploymentFailed"
+
+	// PipelineTargetSelectionFailedReason is used when we fail to select a target environment for the pipeline.
+	PipelineTargetSelectionFailedReason = "PipelineTargetSelectionFailed"
 )

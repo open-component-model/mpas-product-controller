@@ -43,4 +43,12 @@ resources:
   kind: ProductDescription
   path: github.com/open-component-model/mpas-product-controller/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  domain: ocm.software
+  group: mpas
+  kind: Target
+  path: github.com/open-component-model/mpas-product-controller/api/v1alpha1
+  version: v1alpha1
 version: "3"

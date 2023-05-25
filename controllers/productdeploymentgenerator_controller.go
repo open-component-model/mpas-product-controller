@@ -71,11 +71,13 @@ func (r *ProductDeploymentGeneratorReconciler) SetupWithManager(mgr ctrl.Manager
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeploymentgenerators/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeploymentgenerators/finalizers,verbs=update
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=projects,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=mpas.ocm.software,resources=targets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=componentsubscriptions,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=componentversions;componentdescriptors,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=localizations;configurations,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=delivery.ocm.software,resources=fluxdeployers,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories;ocirepositories;buckets;ocirepositories,verbs=create;update;patch;delete;get;list;watch
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=snapshots,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=snapshots/status,verbs=get;update;patch
@@ -341,7 +343,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx conte
 		ServiceAccountName: obj.Spec.ServiceAccountName,
 	}
 
-	values := make(map[string]map[string]string)
+	values := make(map[string]map[string]any)
 
 	for _, p := range prodDesc.Spec.Pipelines {
 		pipe, err := r.createProductPipeline(prodDesc, p, cv, values)
@@ -369,10 +371,12 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx conte
 
 // createProductPipeline takes a pipeline description and builds up all the Kubernetes objects that are needed
 // for that resource.
-func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(description v1alpha1.ProductDescription, p v1alpha1.ProductDescriptionPipeline, cv ocm.ComponentVersionAccess, values map[string]map[string]string) (v1alpha1.Pipeline, error) {
+func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(description v1alpha1.ProductDescription, p v1alpha1.ProductDescriptionPipeline, cv ocm.ComponentVersionAccess, values map[string]map[string]any) (v1alpha1.Pipeline, error) {
 	// TODO: Select a target role from the based on the target selector.
 	var targetRole *v1alpha1.TargetRole
 
+	// TODO: If target role is empty, select one from the list
+	// if the list is empty, select one from the available targets.
 	for _, role := range description.Spec.TargetRoles {
 		if role.Name == p.TargetRoleName {
 			targetRole = &role.TargetRole
