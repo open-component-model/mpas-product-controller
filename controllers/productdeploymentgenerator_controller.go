@@ -5,6 +5,7 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -15,6 +16,12 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
+	markdown "github.com/teekennedy/goldmark-markdown"
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/text"
+	"github.com/yuin/goldmark/util"
 	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -48,6 +55,10 @@ const (
 	kustomizationFile = `resources:
 - product-deployment.yaml
 `
+)
+
+var (
+	unschedulableError = errors.New("pipeline cannot be scheduled as it doesn't define any target scopes")
 )
 
 // ProductDeploymentGeneratorReconciler reconciles a ProductDeploymentGenerator object
@@ -258,6 +269,13 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 	productDeployment, err := r.createProductDeployment(ctx, obj, *prodDesc, component, productFolder, cv)
 	if err != nil {
+		if errors.Is(err, unschedulableError) {
+			conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductPipelineSchedulingFailedReason, err.Error())
+
+			// stop reconciling until fixed
+			return ctrl.Result{}, nil
+		}
+
 		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CreateProductPipelineFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to create product deployment: %w", err)
@@ -344,13 +362,24 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx conte
 	}
 
 	values := make(map[string]map[string]any)
+	var readme []byte
 
 	for _, p := range prodDesc.Spec.Pipelines {
-		pipe, err := r.createProductPipeline(prodDesc, p, cv, values)
+		pipe, instructions, err := r.createProductPipeline(prodDesc, p, cv, values)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create product pipeline: %w", err)
 		}
+
 		spec.Pipelines = append(spec.Pipelines, pipe)
+
+		readme = append(readme, []byte(fmt.Sprintf("\n# Configuration instructions for %s\n\n", p.Name))...)
+
+		parsed, err := r.increaseHeaders(instructions)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse instructions: %w", err)
+		}
+
+		readme = append(readme, parsed...)
 	}
 
 	defaultConfig, err := yaml.Marshal(values)
@@ -359,6 +388,10 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx conte
 	}
 	if err := os.WriteFile(filepath.Join(dir, "values.yaml"), defaultConfig, 0o777); err != nil {
 		return nil, fmt.Errorf("failed to write configuration values file: %w", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), readme, 0o777); err != nil {
+		return nil, fmt.Errorf("failed to write readme file: %w", err)
 	}
 
 	productDeployment.Spec = spec
@@ -371,11 +404,18 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx conte
 
 // createProductPipeline takes a pipeline description and builds up all the Kubernetes objects that are needed
 // for that resource.
-func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(description v1alpha1.ProductDescription, p v1alpha1.ProductDescriptionPipeline, cv ocm.ComponentVersionAccess, values map[string]map[string]any) (v1alpha1.Pipeline, error) {
-	// TODO: Select a target role from the based on the target selector.
+func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(
+	description v1alpha1.ProductDescription,
+	p v1alpha1.ProductDescriptionPipeline,
+	cv ocm.ComponentVersionAccess,
+	values map[string]map[string]any,
+) (v1alpha1.Pipeline, []byte, error) {
 	var targetRole *v1alpha1.TargetRole
 
-	// TODO: If target role is empty, select one from the list
+	if p.TargetRoleName == "" {
+		return v1alpha1.Pipeline{}, nil, fmt.Errorf("pipeline '%s' cannot be scheduled: %w", p.Name, unschedulableError)
+	}
+
 	// if the list is empty, select one from the available targets.
 	for _, role := range description.Spec.TargetRoles {
 		if role.Name == p.TargetRoleName {
@@ -385,22 +425,28 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(description
 	}
 
 	if targetRole == nil {
-		return v1alpha1.Pipeline{}, fmt.Errorf("failed to find a target role with name %s", p.TargetRoleName)
+		return v1alpha1.Pipeline{}, nil, fmt.Errorf("failed to find a target role with name %s: %w", p.TargetRoleName, unschedulableError)
 	}
 
 	// fetch values and create values.yaml file in dir with pipeline.Name-values.yaml
 	if p.Configuration.Rules.Name != "" {
 		content, err := r.OCMClient.GetResourceData(cv, p.Configuration.Rules)
 		if err != nil {
-			return v1alpha1.Pipeline{}, fmt.Errorf("failed to get resource data for %s: %w", p.Configuration.Rules.Name, err)
+			return v1alpha1.Pipeline{}, nil, fmt.Errorf("failed to get resource data for %s: %w", p.Configuration.Rules.Name, err)
 		}
 
 		configData := &ocmconfig.ConfigData{}
 		if err := kyaml.Unmarshal(content, configData); err != nil {
-			return v1alpha1.Pipeline{}, fmt.Errorf("failed to get unmarshal config data: %w", err)
+			return v1alpha1.Pipeline{}, nil, fmt.Errorf("failed to get unmarshal config data: %w", err)
 		}
 
 		values[p.Name] = configData.Configuration.Defaults
+	}
+
+	// add readme
+	instructions, err := r.OCMClient.GetResourceData(cv, p.Configuration.Readme)
+	if err != nil {
+		return v1alpha1.Pipeline{}, nil, fmt.Errorf("failed to get readme data for %s: %w", p.Configuration.Readme.Name, err)
 	}
 
 	return v1alpha1.Pipeline{
@@ -411,7 +457,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(description
 		},
 		Resource:   p.Source,
 		TargetRole: *targetRole,
-	}, nil
+	}, instructions, nil
 }
 
 func (r *ProductDeploymentGeneratorReconciler) createSnapshot(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator, productDeployment *v1alpha1.ProductDeployment, component replicationv1.Component, dir string) (string, error) {
@@ -457,4 +503,37 @@ func (r *ProductDeploymentGeneratorReconciler) createSnapshot(ctx context.Contex
 	obj.Status.LatestSnapshotDigest = digest
 
 	return snapshotName, nil
+}
+
+func (r *ProductDeploymentGeneratorReconciler) increaseHeaders(instructions []byte) ([]byte, error) {
+	prioritizedTransformer := util.Prioritized(&headerTransformer{}, 0)
+
+	gm := goldmark.New(
+		goldmark.WithRenderer(markdown.NewRenderer()),
+		goldmark.WithParserOptions(parser.WithASTTransformers(prioritizedTransformer)),
+	)
+
+	var buf bytes.Buffer
+	if err := gm.Convert(instructions, &buf); err != nil {
+		return nil, fmt.Errorf("failed to convert instructions: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
+type headerTransformer struct{}
+
+func (t *headerTransformer) Transform(doc *ast.Document, reader text.Reader, pctx parser.Context) {
+	_ = ast.Walk(doc, func(node ast.Node, enter bool) (ast.WalkStatus, error) {
+		if enter {
+			heading, ok := node.(*ast.Heading)
+			if !ok {
+				return ast.WalkContinue, nil
+			}
+
+			heading.Level++
+		}
+
+		return ast.WalkSkipChildren, nil
+	})
 }
