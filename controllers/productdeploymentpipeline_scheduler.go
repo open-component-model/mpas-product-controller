@@ -82,7 +82,7 @@ func (r *ProductDeploymentPipelineScheduler) Reconcile(ctx context.Context, req 
 		}
 	}()
 
-	target, err := r.FilterTarget(ctx, obj.Spec.TargetRole, r.MpasSystemNamespace)
+	target, err := r.SelectTarget(ctx, obj.Spec.TargetRole, r.MpasSystemNamespace)
 	if err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.PipelineDeploymentFailedReason, err.Error())
 

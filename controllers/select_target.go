@@ -16,8 +16,8 @@ import (
 	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
 )
 
-// FilterTarget selects a target based on the provided filtering options.
-func (r *ProductDeploymentPipelineScheduler) FilterTarget(ctx context.Context, role v1alpha1.TargetRole, namespace string) (v1alpha1.Target, error) {
+// SelectTarget selects a target based on the provided filtering options.
+func (r *ProductDeploymentPipelineScheduler) SelectTarget(ctx context.Context, role v1alpha1.TargetRole, namespace string) (v1alpha1.Target, error) {
 	targetList := &v1alpha1.TargetList{}
 
 	m, err := v1.LabelSelectorAsSelector(&role.Selector)
@@ -27,6 +27,7 @@ func (r *ProductDeploymentPipelineScheduler) FilterTarget(ctx context.Context, r
 
 	// We can't use client.MatchingFields for spec.type since we don't have a controller for Target
 	// and thus, we can't index the type field.
+	//TODO: post MVP add controller for targets
 	if err := r.List(ctx, targetList, client.InNamespace(namespace), client.MatchingLabelsSelector{
 		Selector: m,
 	}); err != nil {
