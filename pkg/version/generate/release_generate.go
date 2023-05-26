@@ -11,7 +11,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 
-	"github.com/open-component-model/mpas-project-controller/pkg/version"
+	"github.com/open-component-model/mpas-product-controller/pkg/version"
 )
 
 func main() {
