@@ -22,6 +22,10 @@ const (
 
 	// CreateProductPipelineFailedReason is used when we fail to create a product pipeline base on a product description.
 	CreateProductPipelineFailedReason = "CreateProductPipelineFailed"
+
+	// ProductPipelineSchedulingFailedReason is used when we one or more pipelines cannot be scheduled because they don't have a target.
+	ProductPipelineSchedulingFailedReason = "ProductPipelineSchedulingFailed"
+
 	// CreateSyncFailedReason is used when we fail to create a git-controller.Sync object in the cluster.
 	CreateSyncFailedReason = "CreateSyncFailed"
 
