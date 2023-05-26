@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	"github.com/stretchr/testify/assert"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,6 +18,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	gitv1alpha1delivery "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
 	alpha1 "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
 	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
@@ -183,8 +186,29 @@ func TestProductDeploymentGeneratorReconciler(t *testing.T) {
 			Namespace: obj.Namespace,
 		},
 	})
+	require.NoError(t, err)
+
+	// Get the Sync and Get the snapshot data?
+	sync := &gitv1alpha1delivery.Sync{}
+	err = fakeClient.Get(context.Background(), types.NamespacedName{Name: obj.Name + "-sync", Namespace: "mpas-system"}, sync)
 
 	require.NoError(t, err)
+
+	assert.Equal(t, "test-repository", sync.Spec.RepositoryRef.Name)
+
+	modifiedReadme, err := os.ReadFile(filepath.Join("testdata", "modified_readme.md"))
+	require.NoError(t, err)
+
+	assert.Equal(t, string(modifiedReadme), fakeWriter.readmeContent)
+	assert.Equal(t, `backend:
+    cacheAddr: tcp://redis:6379
+    replicas: 2
+`, fakeWriter.valuesContent)
+
+	productDeployment, err := os.ReadFile(filepath.Join("testdata", "product_deployment.yaml"))
+	require.NoError(t, err)
+
+	assert.Equal(t, string(productDeployment), fakeWriter.productDeploymentContent)
 }
 
 type mockSnapshotWriter struct {
@@ -192,11 +216,34 @@ type mockSnapshotWriter struct {
 
 	digest string
 	err    error
+
+	readmeContent            string
+	productDeploymentContent string
+	valuesContent            string
 }
 
 var _ snapshot.Writer = &mockSnapshotWriter{}
 
 func (m *mockSnapshotWriter) Write(ctx context.Context, owner ocmctrv1.SnapshotWriter, sourceDir string, identity ocmmetav1.Identity) (string, error) {
+	productDeploymentContent, err := os.ReadFile(filepath.Join(sourceDir, "test-product-deployment-generator", "product-deployment.yaml"))
+	if err != nil {
+		return "", fmt.Errorf("failed to read product deployment content: %w", err)
+	}
+
+	valuesContent, err := os.ReadFile(filepath.Join(sourceDir, "test-product-deployment-generator", "values.yaml"))
+	if err != nil {
+		return "", fmt.Errorf("failed to read values file: %w", err)
+	}
+
+	readmeContent, err := os.ReadFile(filepath.Join(sourceDir, "test-product-deployment-generator", "README.md"))
+	if err != nil {
+		return "", fmt.Errorf("failed to read readme file: %w", err)
+	}
+
+	m.productDeploymentContent = string(productDeploymentContent)
+	m.valuesContent = string(valuesContent)
+	m.readmeContent = string(readmeContent)
+
 	return m.digest, m.err
 }
 

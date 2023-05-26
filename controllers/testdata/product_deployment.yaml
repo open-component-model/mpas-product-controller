@@ -1,0 +1,37 @@
+apiVersion: mpas.ocm.software/v1alpha1
+kind: ProductDeployment
+metadata:
+  creationTimestamp: null
+  name: podinfo
+  namespace: mpas-system
+spec:
+  component:
+    name: github.com/open-component-model/mpas
+    registry:
+      url: https://github.com/open-component-model/source
+    version: v0.0.1
+  pipelines:
+  - configuration:
+      rules:
+        name: config
+        referencePath:
+        - name: backend
+        version: 1.0.0
+    localization:
+      name: config
+      referencePath:
+      - name: backend
+      version: 1.0.0
+    name: backend
+    resource:
+      name: manifests
+      referencePath:
+      - name: backend
+      version: 1.0.0
+    targetRole:
+      selector:
+        matchLabels:
+          target.mpas.ocm.software/ingress-enabled: "true"
+      type: kubernetes
+  serviceAccountName: test-service-account
+status: {}
