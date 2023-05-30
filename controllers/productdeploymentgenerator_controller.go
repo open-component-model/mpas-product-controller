@@ -351,7 +351,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx conte
 			APIVersion: v1alpha1.GroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      prodDesc.Name,
+			Name:      obj.Name,
 			Namespace: obj.Namespace,
 		},
 	}

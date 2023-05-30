@@ -2,7 +2,7 @@ apiVersion: mpas.ocm.software/v1alpha1
 kind: ProductDeployment
 metadata:
   creationTimestamp: null
-  name: podinfo
+  name: test-product-deployment-generator
   namespace: mpas-system
 spec:
   component:
