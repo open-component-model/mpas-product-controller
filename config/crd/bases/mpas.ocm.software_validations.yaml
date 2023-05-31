@@ -1,0 +1,125 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.11.1
+  creationTimestamp: null
+  name: validations.mpas.ocm.software
+spec:
+  group: mpas.ocm.software
+  names:
+    kind: Validation
+    listKind: ValidationList
+    plural: validations
+    singular: validation
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Validation is the Schema for the validations API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ValidationSpec defines the desired state of Validation Fetches
+              pull request ID and GitRepository from the Sync object.
+            properties:
+              interval:
+                type: string
+              serviceAccountName:
+                type: string
+              syncRef:
+                description: SyncRef references the Sync request that will create
+                  the git repository to track the values.yaml file.
+                properties:
+                  name:
+                    description: Name of the referent.
+                    type: string
+                  namespace:
+                    description: Namespace of the referent, when not specified it
+                      acts as LocalObjectReference.
+                    type: string
+                required:
+                - name
+                type: object
+              validationRules:
+                description: ValidationRules points to the snapshot containing the
+                  rules
+                items:
+                  properties:
+                    extraIdentity:
+                      additionalProperties:
+                        type: string
+                      description: ExtraIdentity is the identity of an object. An
+                        additional label with key "name" ist not allowed
+                      type: object
+                    labels:
+                      description: Labels defines an optional set of additional labels
+                        describing the object.
+                      items:
+                        description: Label is a label that can be set on objects.
+                        properties:
+                          name:
+                            description: Name is the unique name of the label.
+                            type: string
+                          signing:
+                            description: Signing describes whether the label should
+                              be included into the signature
+                            type: boolean
+                          value:
+                            description: Value is the json/yaml data of the label
+                            x-kubernetes-preserve-unknown-fields: true
+                          version:
+                            description: Version is the optional specification version
+                              of the attribute value
+                            type: string
+                        required:
+                        - name
+                        - value
+                        type: object
+                      type: array
+                    name:
+                      description: Name is the context unique name of the object.
+                      type: string
+                    referencePath:
+                      items:
+                        additionalProperties:
+                          type: string
+                        description: Identity describes the identity of an object.
+                          Only ascii characters are allowed
+                        type: object
+                      type: array
+                    version:
+                      description: Version is the semver version of the object.
+                      type: string
+                  required:
+                  - name
+                  - version
+                  type: object
+                type: array
+            required:
+            - interval
+            - serviceAccountName
+            - syncRef
+            - validationRules
+            type: object
+          status:
+            description: ValidationStatus defines the observed state of Validation
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

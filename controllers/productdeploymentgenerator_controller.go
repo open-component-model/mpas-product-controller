@@ -267,7 +267,9 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 	productFolder := filepath.Join(dir, obj.Name)
 
-	productDeployment, err := r.createProductDeployment(ctx, obj, *prodDesc, component, productFolder, cv)
+	validationRules := make([]v1alpha1.ResourceReference, 0)
+
+	productDeployment, err := r.createProductDeployment(ctx, obj, *prodDesc, component, productFolder, cv, &validationRules)
 	if err != nil {
 		if errors.Is(err, unschedulableError) {
 			conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductPipelineSchedulingFailedReason, err.Error())
@@ -339,10 +341,49 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{}, fmt.Errorf("failed to create sync request: %w", err)
 	}
 
+	// Create the Validation Object.
+	validation := &v1alpha1.Validation{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      obj.Name + "-validation",
+			Namespace: obj.Namespace,
+		},
+		Spec: v1alpha1.ValidationSpec{
+			ValidationRules:    validationRules,
+			ServiceAccountName: obj.Spec.ServiceAccountName,
+			Interval:           metav1.Duration{Duration: 10 * time.Second},
+			SyncRef: meta.NamespacedObjectReference{
+				Name:      sync.Name,
+				Namespace: sync.Namespace,
+			},
+		},
+	}
+
+	if _, err := ctrl.CreateOrUpdate(ctx, r.Client, validation, func() error {
+		if validation.ObjectMeta.CreationTimestamp.IsZero() {
+			if err := controllerutil.SetOwnerReference(obj, validation, r.Scheme); err != nil {
+				return fmt.Errorf("failed to set owner to validation object: %w", err)
+			}
+		}
+
+		return nil
+	}); err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CreateValidationFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to create validation request: %w", err)
+	}
+
 	return ctrl.Result{}, nil
 }
 
-func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator, prodDesc v1alpha1.ProductDescription, component replicationv1.Component, dir string, cv ocm.ComponentVersionAccess) (*v1alpha1.ProductDeployment, error) {
+func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
+	ctx context.Context,
+	obj *v1alpha1.ProductDeploymentGenerator,
+	prodDesc v1alpha1.ProductDescription,
+	component replicationv1.Component,
+	dir string,
+	cv ocm.ComponentVersionAccess,
+	validationRules *[]v1alpha1.ResourceReference,
+) (*v1alpha1.ProductDeployment, error) {
 	logger := log.FromContext(ctx)
 
 	productDeployment := &v1alpha1.ProductDeployment{
@@ -380,6 +421,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx conte
 		}
 
 		readme = append(readme, parsed...)
+		*validationRules = append(*validationRules, p.Validation)
 	}
 
 	defaultConfig, err := yaml.Marshal(values)
@@ -399,7 +441,6 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx conte
 	logger.Info("successfully generated product deployment", "productDeployment", klog.KObj(productDeployment))
 
 	return productDeployment, nil
-
 }
 
 // createProductPipeline takes a pipeline description and builds up all the Kubernetes objects that are needed

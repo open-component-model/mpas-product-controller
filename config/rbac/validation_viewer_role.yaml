@@ -1,0 +1,27 @@
+# permissions for end users to view validations.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: validation-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: mpas-product-controller
+    app.kubernetes.io/part-of: mpas-product-controller
+    app.kubernetes.io/managed-by: kustomize
+  name: validation-viewer-role
+rules:
+- apiGroups:
+  - mpas.ocm.software
+  resources:
+  - validations
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - mpas.ocm.software
+  resources:
+  - validations/status
+  verbs:
+  - get

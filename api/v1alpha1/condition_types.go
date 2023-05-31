@@ -29,6 +29,9 @@ const (
 	// CreateSyncFailedReason is used when we fail to create a git-controller.Sync object in the cluster.
 	CreateSyncFailedReason = "CreateSyncFailed"
 
+	// CreateValidationFailedReason is used when we fail to create a Validation object in the cluster.
+	CreateValidationFailedReason = "CreateValidationFailed"
+
 	// CreateSnapshotFailedReason is used when we fail to create an ocm-controller.Snapshot object in the cluster.
 	CreateSnapshotFailedReason = "CreateSnapshotFailed"
 

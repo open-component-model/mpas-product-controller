@@ -220,6 +220,32 @@ rules:
   - update
   - watch
 - apiGroups:
+  - mpas.ocm.software
+  resources:
+  - validations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - mpas.ocm.software
+  resources:
+  - validations/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - mpas.ocm.software
+  resources:
+  - validations/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - source.toolkit.fluxcd.io
   resources:
   - buckets

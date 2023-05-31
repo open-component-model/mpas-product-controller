@@ -59,7 +59,7 @@ spec:
                 type: object
               pipelines:
                 items:
-                  description: Pipeline defines a set of Loca
+                  description: Pipeline defines a set of pipeline objects.
                   properties:
                     configuration:
                       description: Configuration defines a list of rules to follow
