@@ -170,6 +170,9 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	// TODO: Do the validation
+	for _, rule := range obj.Spec.ValidationRules {
+		logger.Info("validating rule", "rule", string(rule.Data), "resource", rule.Name)
+	}
 
 	// TODO: Once validation succeeds, we need to delete the GitRepository.
 

@@ -16,7 +16,7 @@ import (
 type ValidationSpec struct {
 	// ValidationRules points to the snapshot containing the rules
 	// +required
-	ValidationRules []ResourceReference `json:"validationRules"`
+	ValidationRules []ValidationData `json:"validationRules"`
 	// +required
 	ServiceAccountName string `json:"serviceAccountName"`
 	// +required
@@ -55,6 +55,12 @@ func (in *Validation) SetConditions(conditions []metav1.Condition) {
 // reconciled again.
 func (in Validation) GetRequeueAfter() time.Duration {
 	return in.Spec.Interval.Duration
+}
+
+// ValidationData contains information about the rules and to which resource they belong to.
+type ValidationData struct {
+	Data []byte `json:"data"`
+	Name string `json:"name"`
 }
 
 //+kubebuilder:object:root=true

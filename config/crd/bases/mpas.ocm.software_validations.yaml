@@ -58,55 +58,17 @@ spec:
                 description: ValidationRules points to the snapshot containing the
                   rules
                 items:
+                  description: ValidationData contains information about the rules
+                    and to which resource they belong to.
                   properties:
-                    extraIdentity:
-                      additionalProperties:
-                        type: string
-                      description: ExtraIdentity is the identity of an object. An
-                        additional label with key "name" ist not allowed
-                      type: object
-                    labels:
-                      description: Labels defines an optional set of additional labels
-                        describing the object.
-                      items:
-                        description: Label is a label that can be set on objects.
-                        properties:
-                          name:
-                            description: Name is the unique name of the label.
-                            type: string
-                          signing:
-                            description: Signing describes whether the label should
-                              be included into the signature
-                            type: boolean
-                          value:
-                            description: Value is the json/yaml data of the label
-                            x-kubernetes-preserve-unknown-fields: true
-                          version:
-                            description: Version is the optional specification version
-                              of the attribute value
-                            type: string
-                        required:
-                        - name
-                        - value
-                        type: object
-                      type: array
-                    name:
-                      description: Name is the context unique name of the object.
+                    data:
+                      format: byte
                       type: string
-                    referencePath:
-                      items:
-                        additionalProperties:
-                          type: string
-                        description: Identity describes the identity of an object.
-                          Only ascii characters are allowed
-                        type: object
-                      type: array
-                    version:
-                      description: Version is the semver version of the object.
+                    name:
                       type: string
                   required:
+                  - data
                   - name
-                  - version
                   type: object
                 type: array
             required:

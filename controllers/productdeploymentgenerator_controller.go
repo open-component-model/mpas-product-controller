@@ -267,7 +267,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 	productFolder := filepath.Join(dir, obj.Name)
 
-	validationRules := make([]v1alpha1.ResourceReference, 0)
+	validationRules := make([]v1alpha1.ValidationData, 0)
 
 	productDeployment, err := r.createProductDeployment(ctx, obj, *prodDesc, component, productFolder, cv, &validationRules)
 	if err != nil {
@@ -382,7 +382,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	component replicationv1.Component,
 	dir string,
 	cv ocm.ComponentVersionAccess,
-	validationRules *[]v1alpha1.ResourceReference,
+	validationRules *[]v1alpha1.ValidationData,
 ) (*v1alpha1.ProductDeployment, error) {
 	logger := log.FromContext(ctx)
 
@@ -421,7 +421,17 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 		}
 
 		readme = append(readme, parsed...)
-		*validationRules = append(*validationRules, p.Validation)
+
+		// fetch the validation rules
+		data, err := r.OCMClient.GetResourceData(cv, p.Validation)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch validation data: %w", err)
+		}
+
+		*validationRules = append(*validationRules, v1alpha1.ValidationData{
+			Name: p.Name,
+			Data: data,
+		})
 	}
 
 	defaultConfig, err := yaml.Marshal(values)
