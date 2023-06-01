@@ -52,7 +52,7 @@ func (t *testEnv) FakeKubeClient(opts ...FakeKubeClientOption) client.Client {
 		o(t)
 	}
 
-	return fake.NewClientBuilder().WithScheme(t.scheme).WithObjects(t.obj...).WithIndex(&v1alpha1.ProductDeploymentPipeline{}, pipelineOwnerKey, func(obj client.Object) []string {
+	return fake.NewClientBuilder().WithScheme(t.scheme).WithObjects(t.obj...).WithIndex(&v1alpha1.ProductDeploymentPipeline{}, controllerMetadataKey, func(obj client.Object) []string {
 		return []string{obj.GetName()}
 	}).Build()
 }

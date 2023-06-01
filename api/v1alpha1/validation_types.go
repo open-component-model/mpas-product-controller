@@ -5,6 +5,8 @@
 package v1alpha1
 
 import (
+	"time"
+
 	"github.com/fluxcd/pkg/apis/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -26,6 +28,33 @@ type ValidationSpec struct {
 
 // ValidationStatus defines the observed state of Validation
 type ValidationStatus struct {
+	// ObservedGeneration is the last reconciled generation.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// +optional
+	// +kubebuilder:printcolumn:name="Ready",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].status",description=""
+	// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// +optional
+	GitRepositoryRef *meta.NamespacedObjectReference `json:"gitRepositoryRef,omitempty"`
+}
+
+// GetConditions returns the conditions of the ComponentVersion.
+func (in *Validation) GetConditions() []metav1.Condition {
+	return in.Status.Conditions
+}
+
+// SetConditions sets the conditions of the ComponentVersion.
+func (in *Validation) SetConditions(conditions []metav1.Condition) {
+	in.Status.Conditions = conditions
+}
+
+// GetRequeueAfter returns the duration after which the ComponentVersion must be
+// reconciled again.
+func (in Validation) GetRequeueAfter() time.Duration {
+	return in.Spec.Interval.Duration
 }
 
 //+kubebuilder:object:root=true

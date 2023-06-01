@@ -10,6 +10,7 @@ import (
 
 	"github.com/fluxcd/source-controller/api/v1beta2"
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
+	gitmpasv1alpha1 "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
 	v1alpha12 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	"github.com/open-component-model/ocm-controller/pkg/oci"
 	"github.com/open-component-model/ocm-controller/pkg/snapshot"
@@ -50,6 +51,7 @@ func init() {
 	utilruntime.Must(v1alpha12.AddToScheme(scheme))
 	utilruntime.Must(gitv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(v1beta2.AddToScheme(scheme))
+	utilruntime.Must(gitmpasv1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -130,8 +132,9 @@ func main() {
 	}
 
 	if err = (&controllers.ValidationReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:              mgr.GetClient(),
+		Scheme:              mgr.GetScheme(),
+		MpasSystemNamespace: mpasSystemNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Validation")
 		os.Exit(1)

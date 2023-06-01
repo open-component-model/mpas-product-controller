@@ -210,6 +210,26 @@ rules:
 - apiGroups:
   - mpas.ocm.software
   resources:
+  - repositories
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - mpas.ocm.software
+  resources:
+  - repositories/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - mpas.ocm.software
+  resources:
   - targets
   verbs:
   - create

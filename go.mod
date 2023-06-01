@@ -14,7 +14,7 @@ require (
 	github.com/fluxcd/pkg/apis/meta v1.0.0
 	github.com/fluxcd/pkg/runtime v0.35.0
 	github.com/fluxcd/source-controller/api v1.0.0-rc.3
-	github.com/open-component-model/git-controller v0.4.1-0.20230531120200-13f56727373e
+	github.com/open-component-model/git-controller v0.4.1-0.20230601123445-f828dd84348a
 	github.com/open-component-model/mpas-project-controller v0.1.1
 	github.com/open-component-model/ocm v0.3.0-rc.1.0.20230509133031-81dc63e1ab96
 	github.com/open-component-model/ocm-controller v0.8.2
@@ -30,6 +30,7 @@ require (
 	k8s.io/apimachinery v0.26.3
 	k8s.io/client-go v0.26.3
 	k8s.io/klog/v2 v2.90.1
+	k8s.io/utils v0.0.0-20230313181309-38a27ef9d749
 	sigs.k8s.io/controller-runtime v0.14.6
 )
 
@@ -189,7 +190,6 @@ require (
 	k8s.io/cli-runtime v0.26.3 // indirect
 	k8s.io/component-base v0.26.3 // indirect
 	k8s.io/kube-openapi v0.0.0-20230228151317-19cbebb19cb7 // indirect
-	k8s.io/utils v0.0.0-20230313181309-38a27ef9d749 // indirect
 	oras.land/oras-go v1.2.2 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/kustomize/api v0.12.1 // indirect
