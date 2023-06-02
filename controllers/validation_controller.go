@@ -78,8 +78,6 @@ func (r *ValidationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, err error) {
 	logger := log.FromContext(ctx)
 
-	logger.V(4).Info("reconciling the validation")
-
 	obj := &mpasv1alpha1.Validation{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -88,6 +86,27 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 		return ctrl.Result{}, fmt.Errorf("failed to retrieve validation object: %w", err)
 	}
+
+	logger.V(4).Info("reconciling the validation", "status", obj.Status)
+
+	objPatcher := patch.NewSerialPatcher(obj, r.Client)
+
+	// Always attempt to patch the object and status after each reconciliation.
+	defer func() {
+		// Patching has not been set up, or the controller errored earlier.
+		if objPatcher == nil {
+			return
+		}
+
+		// Set status observed generation option if the object is stalled or ready.
+		if conditions.IsStalled(obj) || conditions.IsReady(obj) {
+			obj.Status.ObservedGeneration = obj.Generation
+		}
+
+		if perr := objPatcher.Patch(ctx, obj); perr != nil {
+			err = errors.Join(err, perr)
+		}
+	}()
 
 	owners := obj.OwnerReferences
 	if len(owners) != 1 {
@@ -138,27 +157,11 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 	}
 
-	objPatcher := patch.NewSerialPatcher(obj, r.Client)
-
-	// Always attempt to patch the object and status after each reconciliation.
-	defer func() {
-		// Patching has not been set up, or the controller errored earlier.
-		if objPatcher == nil {
-			return
-		}
-
-		// Set status observed generation option if the object is stalled or ready.
-		if conditions.IsStalled(obj) || conditions.IsReady(obj) {
-			obj.Status.ObservedGeneration = obj.Generation
-		}
-
-		if perr := objPatcher.Patch(ctx, obj); perr != nil {
-			err = errors.Join(err, perr)
-		}
-	}()
-
 	repository := &gitmpasv1alpha1.Repository{}
-	if err := r.Get(ctx, types.NamespacedName{Name: project.Status.RepositoryRef.Name, Namespace: project.Status.RepositoryRef.Namespace}, repository); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{
+		Name:      project.Status.RepositoryRef.Name,
+		Namespace: project.Status.RepositoryRef.Namespace,
+	}, repository); err != nil {
 		return ctrl.Result{}, err
 	}
 
