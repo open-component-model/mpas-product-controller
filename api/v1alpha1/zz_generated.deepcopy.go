@@ -76,6 +76,7 @@ func (in *Pipeline) DeepCopyInto(out *Pipeline) {
 	in.Resource.DeepCopyInto(&out.Resource)
 	in.Localization.DeepCopyInto(&out.Localization)
 	in.Configuration.DeepCopyInto(&out.Configuration)
+	in.Validation.DeepCopyInto(&out.Validation)
 	in.TargetRole.DeepCopyInto(&out.TargetRole)
 }
 
@@ -316,6 +317,7 @@ func (in *ProductDeploymentPipelineSpec) DeepCopyInto(out *ProductDeploymentPipe
 	in.Resource.DeepCopyInto(&out.Resource)
 	in.Localization.DeepCopyInto(&out.Localization)
 	in.Configuration.DeepCopyInto(&out.Configuration)
+	in.Validation.DeepCopyInto(&out.Validation)
 	in.TargetRole.DeepCopyInto(&out.TargetRole)
 	out.TargetRef = in.TargetRef
 }

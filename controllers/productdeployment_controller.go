@@ -187,6 +187,7 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 				Localization:        pipeline.Localization,
 				Configuration:       pipeline.Configuration,
 				TargetRole:          pipeline.TargetRole,
+				Validation:          pipeline.Validation,
 				ComponentVersionRef: r.generateComponentVersionName(obj),
 			},
 		}

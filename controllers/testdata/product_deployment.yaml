@@ -33,5 +33,10 @@ spec:
         matchLabels:
           target.mpas.ocm.software/ingress-enabled: "true"
       type: kubernetes
+    validation:
+      name: validation
+      referencePath:
+      - name: backend
+      version: 1.0.0
   serviceAccountName: test-service-account
 status: {}

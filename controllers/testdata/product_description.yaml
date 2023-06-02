@@ -28,11 +28,11 @@ spec:
           version: 1.0.0
           referencePath:
             - name: backend
-#      validation:
-#        name: validation
-#        version: 1.0.0
-#        referencePath:
-#          - name: backend
+      validation:
+        name: validation
+        version: 1.0.0
+        referencePath:
+          - name: backend
   targetRoles:
     - name: ingress
       type: kubernetes

@@ -21,6 +21,8 @@ type ProductDeploymentPipelineSpec struct {
 	// +required
 	Configuration Configuration `json:"configuration"`
 	// +required
+	Validation ResourceReference `json:"validation"`
+	// +required
 	TargetRole TargetRole `json:"targetRole"`
 
 	//+optional

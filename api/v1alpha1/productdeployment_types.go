@@ -73,6 +73,7 @@ type Pipeline struct {
 	Resource      ResourceReference `json:"resource"`
 	Localization  ResourceReference `json:"localization"`
 	Configuration Configuration     `json:"configuration"`
+	Validation    ResourceReference `json:"validation"`
 	TargetRole    TargetRole        `json:"targetRole"`
 }
 

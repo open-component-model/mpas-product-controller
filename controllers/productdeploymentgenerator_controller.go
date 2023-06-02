@@ -508,6 +508,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(
 		},
 		Resource:   p.Source,
 		TargetRole: *targetRole,
+		Validation: p.Validation,
 	}, instructions, nil
 }
 
