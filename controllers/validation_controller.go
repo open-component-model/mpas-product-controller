@@ -5,17 +5,23 @@
 package controllers
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
+	"github.com/fluxcd/pkg/untar"
+	v1 "github.com/fluxcd/source-controller/api/v1"
 	sourcebeta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/open-component-model/mpas-product-controller/pkg/validators"
+	"github.com/open-policy-agent/opa/rego"
+	"gopkg.in/yaml.v3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -193,25 +199,56 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, fmt.Errorf("failed to find values file tracking git repository: %w", err)
 	}
 
-	if gitRepository.GetArtifact() == nil {
+	artifact := gitRepository.GetArtifact()
+	if artifact == nil {
 		logger.Info("no artifact for values tracking git repository yet")
 
 		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 	}
 
-	if gitRepository.GetArtifact().Digest == obj.Status.LastValidatedDigest {
-		logger.Info("digest already validated", "digest", gitRepository.GetArtifact().Digest)
+	if artifact.Digest == obj.Status.LastValidatedDigest {
+		logger.Info("digest already validated", "digest", artifact.Digest)
 
 		return ctrl.Result{}, nil
 	}
 
-	obj.Status.LastValidatedDigest = gitRepository.GetArtifact().Digest
+	obj.Status.LastValidatedDigest = artifact.Digest
 
-	// TODO: Do the validationI
+	data, err := r.downloadArtifactContent(ctx, owners[0].Name, artifact)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to fetch artifact content from git repositroy: %w", err)
+	}
+
+	valuesData := make(map[string]any)
+	if err := yaml.Unmarshal(data, valuesData); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to parse values file: %w", err)
+	}
+
 	for _, rule := range obj.Spec.ValidationRules {
 		logger.Info("validating rule", "rule", string(rule.Data), "resource", rule.Name)
 
-		if bytes.Contains(rule.Data, []byte("tcp://redis:6379")) {
+		valuesPart, ok := valuesData[rule.Name]
+		if !ok {
+			return ctrl.Result{}, fmt.Errorf("no values found for rule with name %s", rule.Name)
+		}
+
+		logger.Info("values part", "values", valuesPart)
+
+		query, err := rego.New(
+			rego.Query("x = data.main.deny"),
+			rego.Module("validation.rego", string(rule.Data)),
+		).PrepareForEval(ctx)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to parse validation content: %w", err)
+		}
+
+		results, err := query.Eval(ctx, rego.EvalInput(valuesPart))
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to evaluate values data: %w", err)
+		}
+
+		if len(results[0].Bindings["x"].([]any)) > 0 {
+			logger.Info("results", "result", results)
 			conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ValidationFailedReason, fmt.Sprintf("failed to validate resource %s", rule.Name))
 			obj.Status.LastValidatedDigestOutcome = mpasv1alpha1.FailedValidationOutcome
 
@@ -301,4 +338,47 @@ func (r *ValidationReconciler) deleteGitRepository(ctx context.Context, ref *met
 	}
 
 	return r.Delete(ctx, repo)
+}
+
+func (r *ValidationReconciler) downloadArtifactContent(ctx context.Context, productName string, artifact *v1.Artifact) (_ []byte, err error) {
+	ctx, done := context.WithTimeout(ctx, 10*time.Second)
+	defer done()
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, artifact.URL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct request: %w", err)
+	}
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download artifact from git repository: %w", err)
+	}
+
+	defer func() {
+		if berr := response.Body.Close(); berr != nil {
+			err = errors.Join(err, berr)
+		}
+	}()
+
+	temp, err := os.MkdirTemp("", "artifact")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp folder: %w", err)
+	}
+
+	defer func() {
+		if oerr := os.RemoveAll(temp); oerr != nil {
+			err = errors.Join(err, oerr)
+		}
+	}()
+
+	if _, err := untar.Untar(response.Body, temp); err != nil {
+		return nil, fmt.Errorf("failed to untar artifact content: %w", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(temp, "products", productName, "values.yaml"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read values yaml: %w", err)
+	}
+
+	return content, nil
 }
