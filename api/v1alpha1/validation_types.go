@@ -42,7 +42,17 @@ type ValidationStatus struct {
 
 	// +optional
 	LastValidatedDigest string `json:"lastValidatedDigest,omitempty"`
+
+	// +optional
+	LastValidatedDigestOutcome ValidationOutcome `json:"lastValidatedDigestOutcome,omitempty"`
 }
+
+type ValidationOutcome string
+
+var (
+	FailedValidationOutcome  ValidationOutcome = "failed"
+	SuccessValidationOutcome ValidationOutcome = "success"
+)
 
 // GetConditions returns the conditions of the ComponentVersion.
 func (in *Validation) GetConditions() []metav1.Condition {

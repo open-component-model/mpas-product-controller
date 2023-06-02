@@ -5,6 +5,7 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -206,9 +207,24 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	obj.Status.LastValidatedDigest = gitRepository.GetArtifact().Digest
 
-	// TODO: Do the validation
+	// TODO: Do the validationI
 	for _, rule := range obj.Spec.ValidationRules {
 		logger.Info("validating rule", "rule", string(rule.Data), "resource", rule.Name)
+
+		if bytes.Contains(rule.Data, []byte("tcp://redis:6379")) {
+			conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ValidationFailedReason, fmt.Sprintf("failed to validate resource %s", rule.Name))
+			obj.Status.LastValidatedDigestOutcome = mpasv1alpha1.FailedValidationOutcome
+
+			if err := r.Validator.FailValidation(ctx, *repository, *sync); err != nil {
+				conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ValidationFailedReason, err.Error())
+
+				return ctrl.Result{}, fmt.Errorf("failed to set pull request checks to success: %w", err)
+			}
+
+			// Upon a validation error we have to stop the reconciliation. A new run will be launched
+			// when the GitRepository source is updated.
+			return ctrl.Result{}, nil
+		}
 	}
 
 	if err := r.deleteGitRepository(ctx, obj.Status.GitRepositoryRef); err != nil {
@@ -224,6 +240,7 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
+	obj.Status.LastValidatedDigestOutcome = mpasv1alpha1.SuccessValidationOutcome
 
 	return ctrl.Result{}, nil
 }
@@ -247,7 +264,7 @@ func (r *ValidationReconciler) createValueFileGitRepository(ctx context.Context,
 			Ignore: pointer.String(fmt.Sprintf(`# exclude all
 /*
 # include values.yaml
-!./products/%s/values.yaml
+!/products/%s/values.yaml
 `, productName)),
 		},
 	}

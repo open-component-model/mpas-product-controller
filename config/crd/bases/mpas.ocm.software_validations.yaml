@@ -164,6 +164,8 @@ spec:
                 type: object
               lastValidatedDigest:
                 type: string
+              lastValidatedDigestOutcome:
+                type: string
               observedGeneration:
                 description: ObservedGeneration is the last reconciled generation.
                 format: int64
