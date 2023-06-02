@@ -46,13 +46,13 @@ type ValidationReconciler struct {
 // SetupWithManager sets up the controller with the Manager.
 func (r *ValidationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &sourcebeta2.GitRepository{}, controllerMetadataKey, func(rawObj client.Object) []string {
-		job := rawObj.(*sourcebeta2.GitRepository)
-		owner := metav1.GetControllerOf(job)
+		repository := rawObj.(*sourcebeta2.GitRepository)
+		owner := metav1.GetControllerOf(repository)
 		if owner == nil {
 			return nil
 		}
 
-		if owner.APIVersion != sourcebeta2.GroupVersion.String() || owner.Kind != sourcebeta2.GitRepositoryKind {
+		if owner.APIVersion != mpasv1alpha1.GroupVersion.String() || owner.Kind != "Validation" {
 			return nil
 		}
 
@@ -138,12 +138,6 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 	}
 
-	if !conditions.IsReady(sync) {
-		logger.Info("sync object not ready yet, requeuing")
-
-		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
-	}
-
 	objPatcher := patch.NewSerialPatcher(obj, r.Client)
 
 	// Always attempt to patch the object and status after each reconciliation.
@@ -169,6 +163,7 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	if obj.Status.GitRepositoryRef == nil {
+		logger.Info("creating git repository to track value changes")
 		// create gitrepository to track values file and immediately requeue
 		ref, err := r.createValueFileGitRepository(ctx, obj, owners[0].Name, sync.Status.PullRequestID, *repository)
 
@@ -186,16 +181,16 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		logger.Info("validating rule", "rule", string(rule.Data), "resource", rule.Name)
 	}
 
-	if err := r.Validator.PassValidation(ctx, *repository, *sync); err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ValidationFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to set pull request checks to success: %w", err)
-	}
-
 	if err := r.deleteGitRepository(ctx, obj.Status.GitRepositoryRef); err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.GitRepositoryCleanUpFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to delete GitRepository tracking the values file: %w", err)
+	}
+
+	if err := r.Validator.PassValidation(ctx, *repository, *sync); err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ValidationFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to set pull request checks to success: %w", err)
 	}
 
 	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")

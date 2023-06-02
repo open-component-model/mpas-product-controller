@@ -40,8 +40,8 @@ type ProductDeploymentReconciler struct {
 // SetupWithManager sets up the controller with the Manager.
 func (r *ProductDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1alpha1.ProductDeploymentPipeline{}, controllerMetadataKey, func(rawObj client.Object) []string {
-		job := rawObj.(*v1alpha1.ProductDeploymentPipeline)
-		owner := metav1.GetControllerOf(job)
+		pipeline := rawObj.(*v1alpha1.ProductDeploymentPipeline)
+		owner := metav1.GetControllerOf(pipeline)
 		if owner == nil {
 			return nil
 		}

@@ -46,7 +46,7 @@ func (v *Validator) FailValidation(ctx context.Context, repository gitv1alpha1.R
 		return v.Next.FailValidation(ctx, repository, sync)
 	}
 
-	return v.createCheckRunStatus(ctx, repository, sync.Status.PullRequestID, "success")
+	return v.createCheckRunStatus(ctx, repository, sync.Status.PullRequestID, "error")
 }
 
 func (v *Validator) PassValidation(ctx context.Context, repository gitv1alpha1.Repository, sync deliveryv1alpha1.Sync) error {
@@ -61,10 +61,13 @@ func (v *Validator) PassValidation(ctx context.Context, repository gitv1alpha1.R
 		return v.Next.PassValidation(ctx, repository, sync)
 	}
 
-	return v.createCheckRunStatus(ctx, repository, sync.Status.PullRequestID, "error")
+	return v.createCheckRunStatus(ctx, repository, sync.Status.PullRequestID, "success")
 }
 
 func (v *Validator) createCheckRunStatus(ctx context.Context, repository gitv1alpha1.Repository, pullRequestID int, status string) error {
+	logger := log.FromContext(ctx)
+
+	logger.Info("updating validation status", "status", status, "pullRequestID", pullRequestID)
 	token, err := v.retrieveAccessToken(ctx, repository)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve token: %w", err)
@@ -80,18 +83,20 @@ func (v *Validator) createCheckRunStatus(ctx context.Context, repository gitv1al
 		return fmt.Errorf("failed to find PR: %w", err)
 	}
 
-	_, _, err = g.Repositories.CreateStatus(ctx, repository.Spec.Owner, repository.Name, *pr.Head.SHA, &ggithub.RepoStatus{
+	ref := *pr.Head.SHA
+	logger.V(4).Info("updating SHA", "sha", ref)
+	state, _, err := g.Repositories.CreateStatus(ctx, repository.Spec.Owner, repository.Name, ref, &ggithub.RepoStatus{
 		// State is the current state of the repository. Possible values are:
 		// pending, success, error, or failure.
 		State:       &status,
 		Description: ggithub.String("MPAS Validation Check"),
 		Context:     ggithub.String(statusCheckName),
 	})
-
 	if err != nil {
 		return fmt.Errorf("failed to create status for pr: %w", err)
 	}
 
+	logger.V(4).Info("status", "status", *state.State, "id", *state.ID, "context", *state.Context)
 	return nil
 }
 
