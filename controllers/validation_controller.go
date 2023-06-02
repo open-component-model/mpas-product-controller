@@ -176,8 +176,35 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 		obj.Status.GitRepositoryRef = &ref
 
-		return ctrl.Result{Requeue: true}, nil
+		// This will requeue anyway, since we are watching GitRepository objects. One the GitRepository is IsReady
+		// it should requeue a run for this validation.
+		return ctrl.Result{}, nil
 	}
+
+	gitRepository := &sourcebeta2.GitRepository{}
+	if err := r.Get(ctx, types.NamespacedName{Name: obj.Status.GitRepositoryRef.Name, Namespace: obj.Status.GitRepositoryRef.Namespace}, gitRepository); err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.Info("we are already done, since we deleted the git repo")
+
+			return ctrl.Result{}, nil
+		}
+
+		return ctrl.Result{}, fmt.Errorf("failed to find values file tracking git repository: %w", err)
+	}
+
+	if gitRepository.GetArtifact() == nil {
+		logger.Info("no artifact for values tracking git repository yet")
+
+		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
+	}
+
+	if gitRepository.GetArtifact().Digest == obj.Status.LastValidatedDigest {
+		logger.Info("digest already validated", "digest", gitRepository.GetArtifact().Digest)
+
+		return ctrl.Result{}, nil
+	}
+
+	obj.Status.LastValidatedDigest = gitRepository.GetArtifact().Digest
 
 	// TODO: Do the validation
 	for _, rule := range obj.Spec.ValidationRules {

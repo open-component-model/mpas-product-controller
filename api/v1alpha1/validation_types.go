@@ -39,6 +39,9 @@ type ValidationStatus struct {
 
 	// +optional
 	GitRepositoryRef *meta.NamespacedObjectReference `json:"gitRepositoryRef,omitempty"`
+
+	// +optional
+	LastValidatedDigest string `json:"lastValidatedDigest,omitempty"`
 }
 
 // GetConditions returns the conditions of the ComponentVersion.
