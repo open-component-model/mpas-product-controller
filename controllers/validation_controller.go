@@ -14,6 +14,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	sourcebeta2 "github.com/fluxcd/source-controller/api/v1beta2"
+	"github.com/open-component-model/mpas-product-controller/pkg/validators"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -39,6 +40,7 @@ type ValidationReconciler struct {
 	Scheme *runtime.Scheme
 
 	MpasSystemNamespace string
+	Validator           validators.Validator
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -80,6 +82,10 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	obj := &mpasv1alpha1.Validation{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+
 		return ctrl.Result{}, fmt.Errorf("failed to retrieve validation object: %w", err)
 	}
 
@@ -95,6 +101,12 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 
 		return ctrl.Result{}, fmt.Errorf("failed to get owner object: %w", err)
+	}
+
+	if !conditions.IsReady(sync) || sync.Status.PullRequestID == 0 {
+		logger.Info("sync request isn't done yet... waiting")
+
+		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 	}
 
 	projectList := &projectv1.ProjectList{}
@@ -151,13 +163,13 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}()
 
+	repository := &gitmpasv1alpha1.Repository{}
+	if err := r.Get(ctx, types.NamespacedName{Name: project.Status.RepositoryRef.Name, Namespace: project.Status.RepositoryRef.Namespace}, repository); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	if obj.Status.GitRepositoryRef == nil {
 		// create gitrepository to track values file and immediately requeue
-		repository := &gitmpasv1alpha1.Repository{}
-		if err := r.Get(ctx, types.NamespacedName{Name: project.Status.RepositoryRef.Name, Namespace: project.Status.RepositoryRef.Namespace}, repository); err != nil {
-			return ctrl.Result{}, err
-		}
-
 		ref, err := r.createValueFileGitRepository(ctx, obj, owners[0].Name, sync.Status.PullRequestID, *repository)
 
 		if err != nil {
@@ -174,7 +186,19 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		logger.Info("validating rule", "rule", string(rule.Data), "resource", rule.Name)
 	}
 
-	// TODO: Once validation succeeds, we need to delete the GitRepository.
+	if err := r.Validator.PassValidation(ctx, *repository, *sync); err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ValidationFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to set pull request checks to success: %w", err)
+	}
+
+	if err := r.deleteGitRepository(ctx, obj.Status.GitRepositoryRef); err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.GitRepositoryCleanUpFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to delete GitRepository tracking the values file: %w", err)
+	}
+
+	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
 
 	return ctrl.Result{}, nil
 }
@@ -183,8 +207,8 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 func (r *ValidationReconciler) createValueFileGitRepository(ctx context.Context, obj *mpasv1alpha1.Validation, productName string, pullId int, repository gitmpasv1alpha1.Repository) (meta.NamespacedObjectReference, error) {
 	repo := &sourcebeta2.GitRepository{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      repository.Name + "-values-repo",
-			Namespace: repository.Namespace,
+			Name:      obj.Name + "-values-repo",
+			Namespace: obj.Namespace,
 		},
 		Spec: sourcebeta2.GitRepositorySpec{
 			URL: repository.GetRepositoryURL(),
@@ -219,4 +243,20 @@ func (r *ValidationReconciler) createValueFileGitRepository(ctx context.Context,
 		Name:      repo.Name,
 		Namespace: repo.Namespace,
 	}, nil
+}
+
+func (r *ValidationReconciler) deleteGitRepository(ctx context.Context, ref *meta.NamespacedObjectReference) error {
+	repo := &sourcebeta2.GitRepository{}
+	if err := r.Get(ctx, types.NamespacedName{
+		Name:      ref.Name,
+		Namespace: ref.Namespace,
+	}, repo); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+
+		return fmt.Errorf("failed to find GitRepositroy object: %w", err)
+	}
+
+	return r.Delete(ctx, repo)
 }
