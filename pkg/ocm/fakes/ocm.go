@@ -109,7 +109,7 @@ func (m *MockOCM) GetResourceDataReturnsOnCall(name string, data []byte, err err
 	}
 }
 
-func (m *MockOCM) GetResourceData(cv ocm.ComponentVersionAccess, ref v1alpha1.ResourceReference) ([]byte, error) {
+func (m *MockOCM) GetResourceData(ctx context.Context, cv ocm.ComponentVersionAccess, ref v1alpha1.ResourceReference) ([]byte, error) {
 	if _, ok := m.getResourceDataReturnsForName[ref.Name]; !ok {
 		return nil, fmt.Errorf("unexpected number of calls to get resource for ref %s; not enough return values have been configured; call count %d", ref.Name, m.getResourceDataCallCount)
 	}

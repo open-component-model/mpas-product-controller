@@ -37,7 +37,7 @@ type Contract interface {
 	CreateAuthenticatedOCMContext(ctx context.Context, serviceAccountName, namespace string) (ocm.Context, error)
 	GetComponentVersion(ctx context.Context, octx ocm.Context, url, name, version string) (ocm.ComponentVersionAccess, error)
 	GetProductDescription(ctx context.Context, octx ocm.Context, cv ocm.ComponentVersionAccess) ([]byte, error)
-	GetResourceData(cv ocm.ComponentVersionAccess, ref v1alpha1.ResourceReference) ([]byte, error)
+	GetResourceData(ctx context.Context, cv ocm.ComponentVersionAccess, ref v1alpha1.ResourceReference) ([]byte, error)
 }
 
 // Client implements the OCM fetcher interface.
@@ -159,11 +159,15 @@ func (c *Client) GetProductDescription(ctx context.Context, octx ocm.Context, cv
 	return content, nil
 }
 
-func (c *Client) GetResourceData(cv ocm.ComponentVersionAccess, ref v1alpha1.ResourceReference) ([]byte, error) {
+func (c *Client) GetResourceData(ctx context.Context, cv ocm.ComponentVersionAccess, ref v1alpha1.ResourceReference) ([]byte, error) {
+	logger := log.FromContext(ctx)
 	var identities []ocmmetav1.Identity
 	identities = append(identities, ref.ReferencePath...)
 
-	res, _, err := utils.ResolveResourceReference(cv, ocmmetav1.NewNestedResourceRef(ocmmetav1.NewIdentity(ref.Name), identities), cv.Repository())
+	identity := ocmmetav1.NewIdentity(ref.Name)
+	logger.V(4).Info("looking for resource data", "resource", ref.Name, "version", ref.Version, "identities", identities, "identity", identity)
+
+	res, _, err := utils.ResolveResourceReference(cv, ocmmetav1.NewNestedResourceRef(identity, identities), cv.Repository())
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve reference path to resource: %w", err)
 	}

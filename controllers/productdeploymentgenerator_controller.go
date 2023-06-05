@@ -406,7 +406,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	var readme []byte
 
 	for _, p := range prodDesc.Spec.Pipelines {
-		pipe, instructions, err := r.createProductPipeline(prodDesc, p, cv, values)
+		pipe, instructions, err := r.createProductPipeline(ctx, prodDesc, p, cv, values)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create product pipeline: %w", err)
 		}
@@ -423,7 +423,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 		readme = append(readme, parsed...)
 
 		// fetch the validation rules
-		data, err := r.OCMClient.GetResourceData(cv, p.Validation)
+		data, err := r.OCMClient.GetResourceData(ctx, cv, p.Validation)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch validation data: %w", err)
 		}
@@ -456,6 +456,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 // createProductPipeline takes a pipeline description and builds up all the Kubernetes objects that are needed
 // for that resource.
 func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(
+	ctx context.Context,
 	description v1alpha1.ProductDescription,
 	p v1alpha1.ProductDescriptionPipeline,
 	cv ocm.ComponentVersionAccess,
@@ -481,7 +482,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(
 
 	// fetch values and create values.yaml file in dir with pipeline.Name-values.yaml
 	if p.Configuration.Rules.Name != "" {
-		content, err := r.OCMClient.GetResourceData(cv, p.Configuration.Rules)
+		content, err := r.OCMClient.GetResourceData(ctx, cv, p.Configuration.Rules)
 		if err != nil {
 			return v1alpha1.Pipeline{}, nil, fmt.Errorf("failed to get resource data for %s: %w", p.Configuration.Rules.Name, err)
 		}
@@ -495,7 +496,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(
 	}
 
 	// add readme
-	instructions, err := r.OCMClient.GetResourceData(cv, p.Configuration.Readme)
+	instructions, err := r.OCMClient.GetResourceData(ctx, cv, p.Configuration.Readme)
 	if err != nil {
 		return v1alpha1.Pipeline{}, nil, fmt.Errorf("failed to get readme data for %s: %w", p.Configuration.Readme.Name, err)
 	}
