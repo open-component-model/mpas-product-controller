@@ -149,8 +149,8 @@ spec:
                   type: object
                 type: array
               gitRepositoryRef:
-                description: NamespacedObjectReference contains enough information
-                  to locate the referenced Kubernetes resource object in any namespace.
+                description: GitRepositoryRef points to the GitRepository that tracks
+                  changes to the values.yaml file.
                 properties:
                   name:
                     description: Name of the referent.
@@ -163,8 +163,12 @@ spec:
                 - name
                 type: object
               lastValidatedDigest:
+                description: LastValidatedDigest contains the last digest that has
+                  been validated.
                 type: string
               lastValidatedDigestOutcome:
+                description: LastValidatedDigestOutcome contains the outcome of the
+                  last digest's validation. Can be failed or success.
                 type: string
               observedGeneration:
                 description: ObservedGeneration is the last reconciled generation.

@@ -19,8 +19,6 @@ import (
 	"github.com/fluxcd/pkg/untar"
 	v1 "github.com/fluxcd/source-controller/api/v1"
 	sourcebeta2 "github.com/fluxcd/source-controller/api/v1beta2"
-	"github.com/open-component-model/mpas-product-controller/pkg/validators"
-	"github.com/open-policy-agent/opa/rego"
 	"gopkg.in/yaml.v3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,9 +34,10 @@ import (
 
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
 	gitmpasv1alpha1 "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
-	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 
 	mpasv1alpha1 "github.com/open-component-model/mpas-product-controller/api/v1alpha1"
+	"github.com/open-component-model/mpas-product-controller/pkg/validators"
+	"github.com/open-component-model/mpas-product-controller/pkg/validators/rego"
 )
 
 // ValidationReconciler reconciles a Validation object
@@ -135,22 +134,12 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 	}
 
-	projectList := &projectv1.ProjectList{}
-	if err := r.List(ctx, projectList, client.InNamespace(r.MpasSystemNamespace)); err != nil {
+	project, err := GetProjectInNamespace(ctx, r.Client, r.MpasSystemNamespace)
+	if err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to find project in namespace: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to find the project in the namespace: %w", err)
 	}
-
-	if v := len(projectList.Items); v != 1 {
-		err := fmt.Errorf("exactly one Project should have been found in namespace %s; got: %d", obj.Namespace, v)
-		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
-
-		return ctrl.Result{}, err
-	}
-
-	//TODO: This is done in another place as well. Might have to extract it. Something like, getProjectForNamespace.
-	project := &projectList.Items[0]
 
 	if !conditions.IsReady(project) {
 		logger.Info("project not ready yet")
@@ -191,7 +180,7 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	gitRepository := &sourcebeta2.GitRepository{}
 	if err := r.Get(ctx, types.NamespacedName{Name: obj.Status.GitRepositoryRef.Name, Namespace: obj.Status.GitRepositoryRef.Namespace}, gitRepository); err != nil {
 		if apierrors.IsNotFound(err) {
-			logger.Info("we are already done, since we deleted the git repo")
+			logger.Info("values file tracking gitrepository already removed")
 
 			return ctrl.Result{}, nil
 		}
@@ -225,31 +214,15 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	for _, rule := range obj.Spec.ValidationRules {
-		logger.Info("validating rule", "rule", string(rule.Data), "resource", rule.Name)
-
-		valuesPart, ok := valuesData[rule.Name]
-		if !ok {
-			return ctrl.Result{}, fmt.Errorf("no values found for rule with name %s", rule.Name)
-		}
-
-		logger.Info("values part", "values", valuesPart)
-
-		query, err := rego.New(
-			rego.Query("x = data.main.deny"),
-			rego.Module("validation.rego", string(rule.Data)),
-		).PrepareForEval(ctx)
+		outcome, err := rego.ValidateRules(ctx, rule, valuesData)
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to parse validation content: %w", err)
+			conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ValidationFailedReason, err.Error())
+
+			return ctrl.Result{}, fmt.Errorf("failed to validate rules %s: %w", rule.Name, err)
 		}
 
-		results, err := query.Eval(ctx, rego.EvalInput(valuesPart))
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to evaluate values data: %w", err)
-		}
-
-		if len(results[0].Bindings["x"].([]any)) > 0 {
-			logger.Info("results", "result", results)
-			conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ValidationFailedReason, fmt.Sprintf("failed to validate resource %s", rule.Name))
+		if !outcome {
+			conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ValidationFailedReason, fmt.Sprintf("validation failed for %s", rule.Name))
 			obj.Status.LastValidatedDigestOutcome = mpasv1alpha1.FailedValidationOutcome
 
 			if err := r.Validator.FailValidation(ctx, *repository, *sync); err != nil {

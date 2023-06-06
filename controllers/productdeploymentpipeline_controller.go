@@ -109,21 +109,12 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 
 	snapshotProvider = localization
 
-	projectList := &projectv1.ProjectList{}
-	if err := r.List(ctx, projectList, client.InNamespace(r.MpasSystemNamespace)); err != nil {
+	project, err := GetProjectInNamespace(ctx, r.Client, r.MpasSystemNamespace)
+	if err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to find project in namespace: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to find the project in the namespace: %w", err)
 	}
-
-	if v := len(projectList.Items); v != 1 {
-		err := fmt.Errorf("exactly one Project should have been found in namespace %s; got: %d", obj.Namespace, v)
-		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
-
-		return ctrl.Result{}, err
-	}
-
-	project := &projectList.Items[0]
 
 	// Create Configuration
 	configuration, err := r.createOrUpdateConfiguration(ctx, obj, owner, localization, project)

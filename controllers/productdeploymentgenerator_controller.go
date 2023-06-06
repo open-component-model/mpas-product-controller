@@ -39,7 +39,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
-	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	ocmconfig "github.com/open-component-model/ocm-controller/pkg/configdata"
 	"github.com/open-component-model/ocm-controller/pkg/snapshot"
@@ -189,21 +188,12 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 	}
 
-	projectList := &projectv1.ProjectList{}
-	if err := r.List(ctx, projectList, client.InNamespace(r.MpasSystemNamespace)); err != nil {
+	project, err := GetProjectInNamespace(ctx, r.Client, r.MpasSystemNamespace)
+	if err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to find project in namespace: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to find the project in the namespace: %w", err)
 	}
-
-	if v := len(projectList.Items); v != 1 {
-		err := fmt.Errorf("exactly one Project should have been found in namespace %s; got: %d", obj.Namespace, v)
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
-
-		return ctrl.Result{}, err
-	}
-
-	project := &projectList.Items[0]
 
 	if !conditions.IsReady(project) {
 		logger.Info("project not ready yet")

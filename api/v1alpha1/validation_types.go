@@ -37,16 +37,20 @@ type ValidationStatus struct {
 	// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.conditions[?(@.type==\"Ready\")].message",description=""
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
+	// GitRepositoryRef points to the GitRepository that tracks changes to the values.yaml file.
 	// +optional
 	GitRepositoryRef *meta.NamespacedObjectReference `json:"gitRepositoryRef,omitempty"`
 
+	// LastValidatedDigest contains the last digest that has been validated.
 	// +optional
 	LastValidatedDigest string `json:"lastValidatedDigest,omitempty"`
 
+	// LastValidatedDigestOutcome contains the outcome of the last digest's validation. Can be failed or success.
 	// +optional
 	LastValidatedDigestOutcome ValidationOutcome `json:"lastValidatedDigestOutcome,omitempty"`
 }
 
+// ValidationOutcome defines the allowed outcome of a validation.
 type ValidationOutcome string
 
 var (
