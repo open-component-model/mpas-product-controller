@@ -214,7 +214,7 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	for _, rule := range obj.Spec.ValidationRules {
-		outcome, err := rego.ValidateRules(ctx, rule, valuesData)
+		outcome, reasons, err := rego.ValidateRules(ctx, rule, valuesData)
 		if err != nil {
 			conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ValidationFailedReason, err.Error())
 
@@ -222,7 +222,7 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 
 		if !outcome {
-			conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ValidationFailedReason, fmt.Sprintf("validation failed for %s", rule.Name))
+			conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ValidationFailedReason, fmt.Sprintf("validation failed for %s with reason: %s", rule.Name, reasons))
 			obj.Status.LastValidatedDigestOutcome = mpasv1alpha1.FailedValidationOutcome
 
 			if err := r.Validator.FailValidation(ctx, *repository, *sync); err != nil {
