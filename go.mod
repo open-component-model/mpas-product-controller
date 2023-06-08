@@ -21,7 +21,7 @@ require (
 	github.com/google/go-github/v52 v52.0.0
 	github.com/open-component-model/git-controller v0.4.1-0.20230601123445-f828dd84348a
 	github.com/open-component-model/mpas-project-controller v0.1.1
-	github.com/open-component-model/ocm v0.3.0-rc.1.0.20230509133031-81dc63e1ab96
+	github.com/open-component-model/ocm v0.3.0-rc.1.0.20230607081545-8d3b8aa59b92
 	github.com/open-component-model/ocm-controller v0.8.2
 	github.com/open-component-model/replication-controller v0.2.1-0.20230420172740-670e1238a8c7
 	github.com/open-policy-agent/opa v0.53.0
@@ -136,8 +136,8 @@ require (
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mandelsoft/filepath v0.0.0-20230412200429-36b1eb66bd27 // indirect
 	github.com/mandelsoft/logging v0.0.0-20230331123830-36542ef18f6f // indirect
-	github.com/mandelsoft/spiff v1.7.0-beta-4 // indirect
-	github.com/mandelsoft/vfs v0.0.0-20230114230722-fb9b39ce80b9 // indirect
+	github.com/mandelsoft/spiff v1.7.0-beta-5 // indirect
+	github.com/mandelsoft/vfs v0.0.0-20230506183150-975954b82357 // indirect
 	github.com/marstr/guid v1.1.0 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/miekg/pkcs11 v1.1.1 // indirect
@@ -189,6 +189,7 @@ require (
 	go.uber.org/multierr v1.9.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/crypto v0.8.0 // indirect
+	golang.org/x/exp v0.0.0-20221212164502-fae10dda9338 // indirect
 	golang.org/x/mod v0.10.0 // indirect
 	golang.org/x/net v0.10.0 // indirect
 	golang.org/x/sync v0.2.0 // indirect
@@ -196,7 +197,7 @@ require (
 	golang.org/x/term v0.8.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
-	golang.org/x/tools v0.8.0 // indirect
+	golang.org/x/tools v0.9.3 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect
