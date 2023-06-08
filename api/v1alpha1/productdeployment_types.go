@@ -67,12 +67,13 @@ type TargetRole struct {
 	Selector metav1.LabelSelector `json:"selector"`
 }
 
-// Pipeline defines a set of Loca
+// Pipeline defines a set of pipeline objects.
 type Pipeline struct {
 	Name          string            `json:"name"`
 	Resource      ResourceReference `json:"resource"`
 	Localization  ResourceReference `json:"localization"`
 	Configuration Configuration     `json:"configuration"`
+	Validation    ResourceReference `json:"validation"`
 	TargetRole    TargetRole        `json:"targetRole"`
 }
 

@@ -169,6 +169,7 @@ func TestProductDeploymentGeneratorReconciler(t *testing.T) {
 	fakeOcmClient.GetResourceDataReturns("config", config, nil)
 	fakeOcmClient.GetResourceDataReturns("manifest", manifest, nil)
 	fakeOcmClient.GetResourceDataReturns("instructions", readme, nil)
+	fakeOcmClient.GetResourceDataReturns("validation", []byte(""), nil)
 	fakeClient := env.FakeKubeClient(WithObjets(project, obj, subscription, serviceAccount))
 	fakeWriter := &mockSnapshotWriter{}
 

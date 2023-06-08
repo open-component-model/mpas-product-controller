@@ -10,12 +10,15 @@ import (
 
 	"github.com/fluxcd/source-controller/api/v1beta2"
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
-	"github.com/open-component-model/mpas-product-controller/pkg/deployers/kubernetes"
-	"github.com/open-component-model/mpas-product-controller/pkg/ocm"
+	gitmpasv1alpha1 "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
+	"github.com/open-component-model/mpas-product-controller/pkg/validators/github"
 	v1alpha12 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	"github.com/open-component-model/ocm-controller/pkg/oci"
 	"github.com/open-component-model/ocm-controller/pkg/snapshot"
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
+
+	"github.com/open-component-model/mpas-product-controller/pkg/deployers/kubernetes"
+	"github.com/open-component-model/mpas-product-controller/pkg/ocm"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -28,9 +31,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	mpasprojv1alpha1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
+
 	mpasv1alpha1 "github.com/open-component-model/mpas-product-controller/api/v1alpha1"
 	"github.com/open-component-model/mpas-product-controller/controllers"
-	mpasprojv1alpha1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -48,6 +52,7 @@ func init() {
 	utilruntime.Must(v1alpha12.AddToScheme(scheme))
 	utilruntime.Must(gitv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(v1beta2.AddToScheme(scheme))
+	utilruntime.Must(gitmpasv1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -127,6 +132,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	githubValidator := github.NewValidator(mgr.GetClient(), nil)
+	if err = (&controllers.ValidationReconciler{
+		Client:              mgr.GetClient(),
+		Scheme:              mgr.GetScheme(),
+		MpasSystemNamespace: mpasSystemNamespace,
+		Validator:           githubValidator,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Validation")
+		os.Exit(1)
+	}
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

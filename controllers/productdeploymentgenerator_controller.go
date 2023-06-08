@@ -39,7 +39,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
-	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	ocmconfig "github.com/open-component-model/ocm-controller/pkg/configdata"
 	"github.com/open-component-model/ocm-controller/pkg/snapshot"
@@ -189,21 +188,12 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 	}
 
-	projectList := &projectv1.ProjectList{}
-	if err := r.List(ctx, projectList, client.InNamespace(r.MpasSystemNamespace)); err != nil {
+	project, err := GetProjectInNamespace(ctx, r.Client, r.MpasSystemNamespace)
+	if err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to find project in namespace: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to find the project in the namespace: %w", err)
 	}
-
-	if v := len(projectList.Items); v != 1 {
-		err := fmt.Errorf("exactly one Project should have been found in namespace %s; got: %d", obj.Namespace, v)
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
-
-		return ctrl.Result{}, err
-	}
-
-	project := &projectList.Items[0]
 
 	if !conditions.IsReady(project) {
 		logger.Info("project not ready yet")
@@ -267,7 +257,9 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 	productFolder := filepath.Join(dir, obj.Name)
 
-	productDeployment, err := r.createProductDeployment(ctx, obj, *prodDesc, component, productFolder, cv)
+	validationRules := make([]v1alpha1.ValidationData, 0)
+
+	productDeployment, err := r.createProductDeployment(ctx, obj, *prodDesc, component, productFolder, cv, &validationRules)
 	if err != nil {
 		if errors.Is(err, unschedulableError) {
 			conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductPipelineSchedulingFailedReason, err.Error())
@@ -339,10 +331,49 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{}, fmt.Errorf("failed to create sync request: %w", err)
 	}
 
+	// Create the Validation Object.
+	validation := &v1alpha1.Validation{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      obj.Name + "-validation",
+			Namespace: obj.Namespace,
+		},
+		Spec: v1alpha1.ValidationSpec{
+			ValidationRules:    validationRules,
+			ServiceAccountName: obj.Spec.ServiceAccountName,
+			Interval:           metav1.Duration{Duration: 10 * time.Second},
+			SyncRef: meta.NamespacedObjectReference{
+				Name:      sync.Name,
+				Namespace: sync.Namespace,
+			},
+		},
+	}
+
+	if _, err := ctrl.CreateOrUpdate(ctx, r.Client, validation, func() error {
+		if validation.ObjectMeta.CreationTimestamp.IsZero() {
+			if err := controllerutil.SetOwnerReference(obj, validation, r.Scheme); err != nil {
+				return fmt.Errorf("failed to set owner to validation object: %w", err)
+			}
+		}
+
+		return nil
+	}); err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CreateValidationFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to create validation request: %w", err)
+	}
+
 	return ctrl.Result{}, nil
 }
 
-func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator, prodDesc v1alpha1.ProductDescription, component replicationv1.Component, dir string, cv ocm.ComponentVersionAccess) (*v1alpha1.ProductDeployment, error) {
+func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
+	ctx context.Context,
+	obj *v1alpha1.ProductDeploymentGenerator,
+	prodDesc v1alpha1.ProductDescription,
+	component replicationv1.Component,
+	dir string,
+	cv ocm.ComponentVersionAccess,
+	validationRules *[]v1alpha1.ValidationData,
+) (*v1alpha1.ProductDeployment, error) {
 	logger := log.FromContext(ctx)
 
 	productDeployment := &v1alpha1.ProductDeployment{
@@ -365,7 +396,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx conte
 	var readme []byte
 
 	for _, p := range prodDesc.Spec.Pipelines {
-		pipe, instructions, err := r.createProductPipeline(prodDesc, p, cv, values)
+		pipe, instructions, err := r.createProductPipeline(ctx, prodDesc, p, cv, values)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create product pipeline: %w", err)
 		}
@@ -380,6 +411,17 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx conte
 		}
 
 		readme = append(readme, parsed...)
+
+		// fetch the validation rules
+		data, err := r.OCMClient.GetResourceData(ctx, cv, p.Validation)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch validation data: %w", err)
+		}
+
+		*validationRules = append(*validationRules, v1alpha1.ValidationData{
+			Name: p.Name,
+			Data: data,
+		})
 	}
 
 	defaultConfig, err := yaml.Marshal(values)
@@ -399,12 +441,12 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(ctx conte
 	logger.Info("successfully generated product deployment", "productDeployment", klog.KObj(productDeployment))
 
 	return productDeployment, nil
-
 }
 
 // createProductPipeline takes a pipeline description and builds up all the Kubernetes objects that are needed
 // for that resource.
 func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(
+	ctx context.Context,
 	description v1alpha1.ProductDescription,
 	p v1alpha1.ProductDescriptionPipeline,
 	cv ocm.ComponentVersionAccess,
@@ -430,7 +472,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(
 
 	// fetch values and create values.yaml file in dir with pipeline.Name-values.yaml
 	if p.Configuration.Rules.Name != "" {
-		content, err := r.OCMClient.GetResourceData(cv, p.Configuration.Rules)
+		content, err := r.OCMClient.GetResourceData(ctx, cv, p.Configuration.Rules)
 		if err != nil {
 			return v1alpha1.Pipeline{}, nil, fmt.Errorf("failed to get resource data for %s: %w", p.Configuration.Rules.Name, err)
 		}
@@ -444,7 +486,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(
 	}
 
 	// add readme
-	instructions, err := r.OCMClient.GetResourceData(cv, p.Configuration.Readme)
+	instructions, err := r.OCMClient.GetResourceData(ctx, cv, p.Configuration.Readme)
 	if err != nil {
 		return v1alpha1.Pipeline{}, nil, fmt.Errorf("failed to get readme data for %s: %w", p.Configuration.Readme.Name, err)
 	}
@@ -457,6 +499,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(
 		},
 		Resource:   p.Source,
 		TargetRole: *targetRole,
+		Validation: p.Validation,
 	}, instructions, nil
 }
 
