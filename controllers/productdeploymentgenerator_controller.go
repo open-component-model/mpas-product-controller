@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
@@ -26,6 +27,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
 	"k8s.io/apimachinery/pkg/types"
@@ -35,8 +37,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
 	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
@@ -72,8 +77,27 @@ type ProductDeploymentGeneratorReconciler struct {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ProductDeploymentGeneratorReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	const (
+		sourceKey = ".metadata.source"
+	)
+
+	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &v1alpha1.ProductDeploymentGenerator{}, sourceKey, func(rawObj client.Object) []string {
+		generator := rawObj.(*v1alpha1.ProductDeploymentGenerator)
+		var ns = generator.Spec.SubscriptionRef.Namespace
+		if ns == "" {
+			ns = generator.GetNamespace()
+		}
+		return []string{fmt.Sprintf("%s/%s", ns, generator.Spec.SubscriptionRef.Name)}
+	}); err != nil {
+		return fmt.Errorf("failed setting index fields: %w", err)
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.ProductDeploymentGenerator{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(
+			&source.Kind{Type: &replicationv1.ComponentSubscription{}},
+			handler.EnqueueRequestsFromMapFunc(r.findGenerators(sourceKey)),
+			builder.WithPredicates(ComponentSubscriptionVersionChangedPredicate{})).
 		Complete(r)
 }
 
@@ -186,6 +210,23 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		logger.Info("referenced subscription isn't ready yet, requeuing")
 
 		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
+	}
+
+	if obj.Status.LastReconciledVersion != "" {
+		lastReconciledGeneratorVersion, err := semver.NewVersion(obj.Status.LastReconciledVersion)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to parse last reconciled version: %w", err)
+		}
+
+		lastReconciledSubscription, err := semver.NewVersion(subscription.Status.LastAppliedVersion)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to parse last reconciled version: %w", err)
+		}
+
+		if lastReconciledSubscription.Equal(lastReconciledGeneratorVersion) || lastReconciledSubscription.LessThan(lastReconciledGeneratorVersion) {
+			logger.Info("data generator version is greater than or equal to last reconciled subscription version", "generator", lastReconciledGeneratorVersion.Original(), "subscription", lastReconciledSubscription.Original())
+			return ctrl.Result{}, nil
+		}
 	}
 
 	project, err := GetProjectInNamespace(ctx, r.Client, r.MpasSystemNamespace)
@@ -361,6 +402,8 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 		return ctrl.Result{}, fmt.Errorf("failed to create validation request: %w", err)
 	}
+
+	obj.Status.LastReconciledVersion = component.Version
 
 	return ctrl.Result{}, nil
 }
@@ -579,4 +622,33 @@ func (t *headerTransformer) Transform(doc *ast.Document, reader text.Reader, pct
 
 		return ast.WalkSkipChildren, nil
 	})
+}
+
+// findGenerators looks for all the generator objects which have indexes on the ComponentVersion that is being
+// fetched here. Specifically, the sourceKey's fields should match the field returned by ObjectKeyFromObject which
+// will be the Name and Namespace of the ComponentSubscription. For which there are indexes set up in the Manager section.
+func (r *ProductDeploymentGeneratorReconciler) findGenerators(sourceKey string) handler.MapFunc {
+	return func(object client.Object) []reconcile.Request {
+		selectorTerm := client.ObjectKeyFromObject(object).String()
+
+		generators := &v1alpha1.ProductDeploymentGeneratorList{}
+		if err := r.List(context.TODO(), generators, &client.ListOptions{
+			FieldSelector: fields.OneTermEqualSelector(sourceKey, selectorTerm),
+		}); err != nil {
+			return []reconcile.Request{}
+		}
+
+		requests := make([]reconcile.Request, 0, len(generators.Items))
+
+		for _, generator := range generators.Items {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      generator.GetName(),
+					Namespace: generator.GetNamespace(),
+				},
+			})
+		}
+
+		return requests
+	}
 }
