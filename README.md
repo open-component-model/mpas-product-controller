@@ -1,5 +1,7 @@
 # MPAS Product Controller
 
+[![REUSE status](https://api.reuse.software/badge/github.com/open-component-model/mpas-product-controller)](https://api.reuse.software/info/github.com/open-component-model/mpas-product-controller)
+
 ## About this project
 
 *Insert a short description of your project here...*
