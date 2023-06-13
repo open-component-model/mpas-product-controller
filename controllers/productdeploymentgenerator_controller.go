@@ -13,12 +13,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
+	"github.com/fluxcd/source-controller/api/v1beta2"
+	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	markdown "github.com/teekennedy/goldmark-markdown"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -63,6 +66,7 @@ const (
 `
 	componentVersionAnnotationKey = "mpas.ocm.system/component-version"
 	componentNameAnnotationKey    = "mpas.ocm.system/component-name"
+	ignoreMarker                  = "+mpas-ignore"
 )
 
 var (
@@ -304,7 +308,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 	validationRules := make([]v1alpha1.ValidationData, 0)
 
-	productDeployment, err := r.createProductDeployment(ctx, obj, *prodDesc, component, productFolder, cv, &validationRules)
+	productDeployment, err := r.createProductDeployment(ctx, obj, *prodDesc, component, productFolder, cv, &validationRules, project)
 	if err != nil {
 		if errors.Is(err, unschedulableError) {
 			conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductPipelineSchedulingFailedReason, err.Error())
@@ -430,6 +434,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	dir string,
 	cv ocm.ComponentVersionAccess,
 	validationRules *[]v1alpha1.ValidationData,
+	project *projectv1.Project,
 ) (*v1alpha1.ProductDeployment, error) {
 	logger := log.FromContext(ctx)
 
@@ -481,6 +486,22 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 		})
 	}
 
+	ignoreValues, err := r.fetchIgnoredValues(ctx, obj.Name, project)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch ignored values: %w", err)
+	}
+
+	logger.V(4).Info("gathered ignored values", "values", ignoreValues)
+	for _, path := range ignoreValues {
+		logger.V(4).Info("looking at current path", "path", path)
+		// the first element in the path will contain our top level resource name.
+		// we start from there and work our way down the path to find the right value
+		// to update.
+		if err := update(values[path.path[0]], path.path[1:], path.value); err != nil {
+			return nil, fmt.Errorf("failed to update values with existing ignored values: %w", err)
+		}
+	}
+
 	defaultConfig, err := yaml.Marshal(values)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal default values: %w", err)
@@ -498,6 +519,25 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	logger.Info("successfully generated product deployment", "productDeployment", klog.KObj(productDeployment))
 
 	return productDeployment, nil
+}
+
+func update(values map[string]any, path []string, value any) error {
+	if len(path) == 1 {
+		values[path[0]] = value
+		return nil
+	}
+
+	subValues, ok := values[path[0]]
+	if !ok {
+		return fmt.Errorf("failed to find path '%s' in values", path[0])
+	}
+
+	v, ok := subValues.(map[string]any)
+	if !ok {
+		return fmt.Errorf("values was not a map at path '%s' but was: %+v", path[0], v)
+	}
+
+	return update(v, path[1:], value)
 }
 
 // createProductPipeline takes a pipeline description and builds up all the Kubernetes objects that are needed
@@ -673,4 +713,69 @@ func (r *ProductDeploymentGeneratorReconciler) hashComponentVersion(version stri
 	h.Write([]byte(version))
 
 	return hex.EncodeToString(h.Sum(nil))[:8]
+}
+
+type value struct {
+	path  []string
+	value any
+}
+
+func (r *ProductDeploymentGeneratorReconciler) fetchIgnoredValues(ctx context.Context, productName string, project *projectv1.Project) ([]value, error) {
+	repoName, repoNamespace, err := FetchGitRepositoryFromProjectInventory(project)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch GitRepository from project: %w", err)
+	}
+
+	repo := &v1beta2.GitRepository{}
+	if err := r.Get(ctx, types.NamespacedName{Name: repoName, Namespace: repoNamespace}, repo); err != nil {
+		return nil, fmt.Errorf("failed to fetch git repository: %w", err)
+	}
+
+	content, err := FetchValuesFileContent(ctx, productName, repo.Status.Artifact)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+
+		return nil, fmt.Errorf("failed to fetch existing values file: %w", err)
+	}
+
+	logger := log.FromContext(ctx)
+	logger.V(4).Info("values file content", "content", string(content))
+
+	existingValues := make(map[string]any)
+	if err := yaml.Unmarshal(content, existingValues); err != nil {
+		return nil, fmt.Errorf("failed to parse existing values file: %w", err)
+	}
+
+	logger.V(4).Info("parsed values", "values", existingValues)
+
+	paths := make([]value, 0)
+
+	gatherAllIgnoredPaths(&paths, []string{}, existingValues)
+
+	logger.V(4).Info("gathered all path", "paths", paths)
+	return paths, nil
+}
+
+func gatherAllIgnoredPaths(paths *[]value, soFar []string, values map[string]any) {
+	for k, v := range values {
+		soFar = append(soFar, k)
+
+		if _, ok := v.(map[string]any); ok {
+			gatherAllIgnoredPaths(paths, soFar, v.(map[string]any))
+			// backtrack
+			soFar = soFar[:len(soFar)-1]
+		} else {
+			if v, ok := values[k].(string); ok {
+				if strings.Contains(v, ignoreMarker) {
+					soFarCopy := make([]string, len(soFar))
+					copy(soFarCopy, soFar)
+					*paths = append(*paths, value{path: soFarCopy, value: v})
+				}
+				// backtrack
+				soFar = soFar[:len(soFar)-1]
+			}
+		}
+	}
 }

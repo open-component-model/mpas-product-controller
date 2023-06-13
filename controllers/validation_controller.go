@@ -8,16 +8,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
-	"github.com/fluxcd/pkg/untar"
-	v1 "github.com/fluxcd/source-controller/api/v1"
 	sourcebeta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	"gopkg.in/yaml.v3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -203,7 +198,7 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	obj.Status.LastValidatedDigest = artifact.Digest
 
-	data, err := r.downloadArtifactContent(ctx, owners[0].Name, artifact)
+	data, err := FetchValuesFileContent(ctx, owners[0].Name, artifact)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to fetch artifact content from git repositroy: %w", err)
 	}
@@ -311,47 +306,4 @@ func (r *ValidationReconciler) deleteGitRepository(ctx context.Context, ref *met
 	}
 
 	return r.Delete(ctx, repo)
-}
-
-func (r *ValidationReconciler) downloadArtifactContent(ctx context.Context, productName string, artifact *v1.Artifact) (_ []byte, err error) {
-	ctx, done := context.WithTimeout(ctx, 10*time.Second)
-	defer done()
-
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, artifact.URL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to construct request: %w", err)
-	}
-
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return nil, fmt.Errorf("failed to download artifact from git repository: %w", err)
-	}
-
-	defer func() {
-		if berr := response.Body.Close(); berr != nil {
-			err = errors.Join(err, berr)
-		}
-	}()
-
-	temp, err := os.MkdirTemp("", "artifact")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temp folder: %w", err)
-	}
-
-	defer func() {
-		if oerr := os.RemoveAll(temp); oerr != nil {
-			err = errors.Join(err, oerr)
-		}
-	}()
-
-	if _, err := untar.Untar(response.Body, temp); err != nil {
-		return nil, fmt.Errorf("failed to untar artifact content: %w", err)
-	}
-
-	content, err := os.ReadFile(filepath.Join(temp, "products", productName, "values.yaml"))
-	if err != nil {
-		return nil, fmt.Errorf("failed to read values yaml: %w", err)
-	}
-
-	return content, nil
 }
