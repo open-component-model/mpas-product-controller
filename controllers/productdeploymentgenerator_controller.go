@@ -7,6 +7,8 @@ package controllers
 import (
 	"bytes"
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -59,6 +61,8 @@ const (
 	kustomizationFile = `resources:
 - product-deployment.yaml
 `
+	componentVersionAnnotationKey = "mpas.ocm.system/component-version"
+	componentNameAnnotationKey    = "mpas.ocm.system/component-name"
 )
 
 var (
@@ -331,10 +335,16 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		repositoryRef = v.Name
 	}
 
+	hashedVersion := r.hashComponentVersion(component.Version)
+
 	sync := &gitv1alpha1.Sync{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      obj.Name + "-sync",
+			Name:      obj.Name + "-sync-" + hashedVersion,
 			Namespace: obj.Namespace,
+			Annotations: map[string]string{
+				componentVersionAnnotationKey: component.Version,
+				componentNameAnnotationKey:    component.Name,
+			},
 		},
 		Spec: gitv1alpha1.SyncSpec{
 			SnapshotRef: corev1.LocalObjectReference{
@@ -375,8 +385,12 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	// Create the Validation Object.
 	validation := &v1alpha1.Validation{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      obj.Name + "-validation",
+			Name:      obj.Name + "-validation-" + hashedVersion,
 			Namespace: obj.Namespace,
+			Annotations: map[string]string{
+				componentVersionAnnotationKey: component.Version,
+				componentNameAnnotationKey:    component.Name,
+			},
 		},
 		Spec: v1alpha1.ValidationSpec{
 			ValidationRules:    validationRules,
@@ -651,4 +665,12 @@ func (r *ProductDeploymentGeneratorReconciler) findGenerators(sourceKey string) 
 
 		return requests
 	}
+}
+
+// hashComponentVersion provides a small chunk of a hexadecimal format for a version.
+func (r *ProductDeploymentGeneratorReconciler) hashComponentVersion(version string) string {
+	h := sha1.New()
+	h.Write([]byte(version))
+
+	return hex.EncodeToString(h.Sum(nil))[:8]
 }

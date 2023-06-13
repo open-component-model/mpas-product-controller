@@ -191,7 +191,7 @@ func TestProductDeploymentGeneratorReconciler(t *testing.T) {
 
 	// Get the Sync and Get the snapshot data?
 	sync := &gitv1alpha1delivery.Sync{}
-	err = fakeClient.Get(context.Background(), types.NamespacedName{Name: obj.Name + "-sync", Namespace: "mpas-system"}, sync)
+	err = fakeClient.Get(context.Background(), types.NamespacedName{Name: obj.Name + "-sync-" + reconciler.hashComponentVersion("v0.0.1"), Namespace: "mpas-system"}, sync)
 
 	require.NoError(t, err)
 
