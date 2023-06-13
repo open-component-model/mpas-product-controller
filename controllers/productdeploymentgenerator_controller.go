@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -21,6 +20,9 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/source-controller/api/v1beta2"
+	"github.com/goccy/go-yaml"
+	yamlast "github.com/goccy/go-yaml/ast"
+	yamlparser "github.com/goccy/go-yaml/parser"
 	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	markdown "github.com/teekennedy/goldmark-markdown"
 	"github.com/yuin/goldmark"
@@ -28,7 +30,6 @@ import (
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
-	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -486,28 +487,42 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 		})
 	}
 
-	ignoreValues, err := r.fetchIgnoredValues(ctx, obj.Name, project)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch ignored values: %w", err)
-	}
-
-	logger.V(4).Info("gathered ignored values", "values", ignoreValues)
-	for _, path := range ignoreValues {
-		logger.V(4).Info("looking at current path", "path", path)
-		// the first element in the path will contain our top level resource name.
-		// we start from there and work our way down the path to find the right value
-		// to update.
-		if err := update(values[path.path[0]], path.path[1:], path.value); err != nil {
-			return nil, fmt.Errorf("failed to update values with existing ignored values: %w", err)
-		}
-	}
-
 	defaultConfig, err := yaml.Marshal(values)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal default values: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "values.yaml"), defaultConfig, 0o777); err != nil {
-		return nil, fmt.Errorf("failed to write configuration values file: %w", err)
+
+	existingValuesFile, err := r.fetchExistingValues(ctx, obj.Name, project)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch ignored values: %w", err)
+	}
+
+	// 0 mode -> don't parse comments as this one doesn't have them.
+	parsedValues, err := yamlparser.ParseBytes(defaultConfig, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse existing values file: %w", err)
+	}
+
+	// TODO: make this better.
+	if existingValuesFile != nil {
+		v := &Visitor{
+			replace: parsedValues,
+		}
+		for _, doc := range existingValuesFile.Docs {
+			yamlast.Walk(v, doc)
+		}
+
+		if v.err != nil {
+			return nil, fmt.Errorf("failed to update values file: %w", v.err)
+		}
+
+		if err := os.WriteFile(filepath.Join(dir, "values.yaml"), []byte(v.replace.String()), 0o777); err != nil {
+			return nil, fmt.Errorf("failed to write configuration values file: %w", err)
+		}
+	} else {
+		if err := os.WriteFile(filepath.Join(dir, "values.yaml"), []byte(parsedValues.String()), 0o777); err != nil {
+			return nil, fmt.Errorf("failed to write configuration values file: %w", err)
+		}
 	}
 
 	if err := os.WriteFile(filepath.Join(dir, "README.md"), readme, 0o777); err != nil {
@@ -519,25 +534,6 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	logger.Info("successfully generated product deployment", "productDeployment", klog.KObj(productDeployment))
 
 	return productDeployment, nil
-}
-
-func update(values map[string]any, path []string, value any) error {
-	if len(path) == 1 {
-		values[path[0]] = value
-		return nil
-	}
-
-	subValues, ok := values[path[0]]
-	if !ok {
-		return fmt.Errorf("failed to find path '%s' in values", path[0])
-	}
-
-	v, ok := subValues.(map[string]any)
-	if !ok {
-		return fmt.Errorf("values was not a map at path '%s' but was: %+v", path[0], v)
-	}
-
-	return update(v, path[1:], value)
 }
 
 // createProductPipeline takes a pipeline description and builds up all the Kubernetes objects that are needed
@@ -715,12 +711,44 @@ func (r *ProductDeploymentGeneratorReconciler) hashComponentVersion(version stri
 	return hex.EncodeToString(h.Sum(nil))[:8]
 }
 
-type value struct {
-	path  []string
-	value any
+type Visitor struct {
+	replace *yamlast.File
+	err     error
 }
 
-func (r *ProductDeploymentGeneratorReconciler) fetchIgnoredValues(ctx context.Context, productName string, project *projectv1.Project) ([]value, error) {
+func (v *Visitor) Visit(node yamlast.Node) yamlast.Visitor {
+	// quit early if there was an error
+	if v.err != nil {
+		return v
+	}
+
+	comment := node.GetComment()
+	if comment == nil {
+		return v
+	}
+
+	path, err := yaml.PathString(node.GetPath())
+	if err != nil {
+		v.err = fmt.Errorf("failed to parse path string: %w", err)
+		return v
+	}
+
+	replaceNode, err := path.FilterFile(v.replace)
+	if err != nil {
+		v.err = fmt.Errorf("failed to filter incoming values with path %s: %w", node.GetPath(), err)
+		return v
+	}
+
+	if err := replaceNode.SetComment(comment); err != nil {
+		return v
+	}
+	tk := replaceNode.GetToken()
+	tk.Value = node.GetToken().Value
+
+	return v
+}
+
+func (r *ProductDeploymentGeneratorReconciler) fetchExistingValues(ctx context.Context, productName string, project *projectv1.Project) (*yamlast.File, error) {
 	repoName, repoNamespace, err := FetchGitRepositoryFromProjectInventory(project)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch GitRepository from project: %w", err)
@@ -740,42 +768,10 @@ func (r *ProductDeploymentGeneratorReconciler) fetchIgnoredValues(ctx context.Co
 		return nil, fmt.Errorf("failed to fetch existing values file: %w", err)
 	}
 
-	logger := log.FromContext(ctx)
-	logger.V(4).Info("values file content", "content", string(content))
-
-	existingValues := make(map[string]any)
-	if err := yaml.Unmarshal(content, existingValues); err != nil {
+	parsedConfig, err := yamlparser.ParseBytes(content, yamlparser.ParseComments)
+	if err != nil {
 		return nil, fmt.Errorf("failed to parse existing values file: %w", err)
 	}
 
-	logger.V(4).Info("parsed values", "values", existingValues)
-
-	paths := make([]value, 0)
-
-	gatherAllIgnoredPaths(&paths, []string{}, existingValues)
-
-	logger.V(4).Info("gathered all path", "paths", paths)
-	return paths, nil
-}
-
-func gatherAllIgnoredPaths(paths *[]value, soFar []string, values map[string]any) {
-	for k, v := range values {
-		soFar = append(soFar, k)
-
-		if _, ok := v.(map[string]any); ok {
-			gatherAllIgnoredPaths(paths, soFar, v.(map[string]any))
-			// backtrack
-			soFar = soFar[:len(soFar)-1]
-		} else {
-			if v, ok := values[k].(string); ok {
-				if strings.Contains(v, ignoreMarker) {
-					soFarCopy := make([]string, len(soFar))
-					copy(soFarCopy, soFar)
-					*paths = append(*paths, value{path: soFarCopy, value: v})
-				}
-				// backtrack
-				soFar = soFar[:len(soFar)-1]
-			}
-		}
-	}
+	return parsedConfig, nil
 }
