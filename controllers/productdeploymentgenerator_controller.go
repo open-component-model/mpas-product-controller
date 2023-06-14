@@ -766,6 +766,10 @@ func (r *ProductDeploymentGeneratorReconciler) fetchExistingValues(ctx context.C
 		return nil, fmt.Errorf("failed to fetch git repository: %w", err)
 	}
 
+	if repo.Status.Artifact == nil {
+		return nil, fmt.Errorf("git repository artifact is empty: %w", err)
+	}
+
 	content, err := FetchValuesFileContent(ctx, productName, repo.Status.Artifact)
 	if err != nil {
 		if os.IsNotExist(err) {

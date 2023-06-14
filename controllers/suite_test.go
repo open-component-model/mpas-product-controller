@@ -7,6 +7,7 @@ package controllers
 import (
 	"testing"
 
+	sourcebeta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	gitv1alpha1delivery "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
 	gitv1alpha1mpas "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
 	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
@@ -68,6 +69,7 @@ func TestMain(m *testing.M) {
 	_ = replicationv1.AddToScheme(scheme)
 	_ = gitv1alpha1delivery.AddToScheme(scheme)
 	_ = gitv1alpha1mpas.AddToScheme(scheme)
+	_ = sourcebeta2.AddToScheme(scheme)
 
 	env = &testEnv{
 		scheme: scheme,

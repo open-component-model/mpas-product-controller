@@ -3,6 +3,8 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,6 +12,8 @@ import (
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	v1 "github.com/fluxcd/source-controller/api/v1"
+	"github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/stretchr/testify/assert"
 
 	corev1 "k8s.io/api/core/v1"
@@ -38,6 +42,29 @@ import (
 )
 
 func TestProductDeploymentGeneratorReconciler(t *testing.T) {
+	manifests, err := os.ReadFile(filepath.Join("testdata", "no-values.tar.gz"))
+	require.NoError(t, err)
+
+	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, string(manifests))
+	}))
+
+	repo := &v1beta2.GitRepository{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "repo",
+			Namespace: "mpas-system",
+		},
+		Spec: v1beta2.GitRepositorySpec{
+			URL: "oci://repo",
+		},
+		Status: v1beta2.GitRepositoryStatus{
+			URL: "oci://repo",
+			Artifact: &v1.Artifact{
+				Path: "./",
+				URL:  testServer.URL,
+			},
+		},
+	}
 	project := &projectv1.Project{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "project",
@@ -170,7 +197,7 @@ func TestProductDeploymentGeneratorReconciler(t *testing.T) {
 	fakeOcmClient.GetResourceDataReturns("manifest", manifest, nil)
 	fakeOcmClient.GetResourceDataReturns("instructions", readme, nil)
 	fakeOcmClient.GetResourceDataReturns("validation", []byte(""), nil)
-	fakeClient := env.FakeKubeClient(WithObjets(project, obj, subscription, serviceAccount))
+	fakeClient := env.FakeKubeClient(WithObjets(repo, project, obj, subscription, serviceAccount))
 	fakeWriter := &mockSnapshotWriter{}
 
 	reconciler := &ProductDeploymentGeneratorReconciler{
