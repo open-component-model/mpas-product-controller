@@ -20,9 +20,9 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	"github.com/fluxcd/source-controller/api/v1beta2"
-	"github.com/goccy/go-yaml"
-	yamlast "github.com/goccy/go-yaml/ast"
-	yamlparser "github.com/goccy/go-yaml/parser"
+	goyaml "github.com/goccy/go-yaml"
+	goyamlast "github.com/goccy/go-yaml/ast"
+	goyamlparser "github.com/goccy/go-yaml/parser"
 	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	markdown "github.com/teekennedy/goldmark-markdown"
 	"github.com/yuin/goldmark"
@@ -30,6 +30,7 @@ import (
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
+	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -487,6 +488,8 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 		})
 	}
 
+	// this is EXPLICITLY using normal yaml.
+	// goyaml, for some reason, parses ints as floats.
 	defaultConfig, err := yaml.Marshal(values)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal default values: %w", err)
@@ -497,32 +500,36 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 		return nil, fmt.Errorf("failed to fetch ignored values: %w", err)
 	}
 
-	// 0 mode -> don't parse comments as this one doesn't have them.
-	parsedValues, err := yamlparser.ParseBytes(defaultConfig, 0)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse existing values file: %w", err)
-	}
-
-	// TODO: make this better.
+	valuesYaml := defaultConfig
 	if existingValuesFile != nil {
+		parsedValues, err := goyamlparser.ParseBytes(defaultConfig, goyamlparser.ParseComments)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse existing values file: %w", err)
+		}
+
 		v := &Visitor{
 			replace: parsedValues,
 		}
+
 		for _, doc := range existingValuesFile.Docs {
-			yamlast.Walk(v, doc)
+			goyamlast.Walk(v, doc)
 		}
 
 		if v.err != nil {
 			return nil, fmt.Errorf("failed to update values file: %w", v.err)
 		}
 
-		if err := os.WriteFile(filepath.Join(dir, "values.yaml"), []byte(v.replace.String()), 0o777); err != nil {
-			return nil, fmt.Errorf("failed to write configuration values file: %w", err)
+		// A silly little fix for when the generated content doesn't have a linebreak.
+		content := []byte(v.replace.String())
+		if !bytes.HasSuffix(content, []byte("\n")) {
+			content = append(content, '\n')
 		}
-	} else {
-		if err := os.WriteFile(filepath.Join(dir, "values.yaml"), []byte(parsedValues.String()), 0o777); err != nil {
-			return nil, fmt.Errorf("failed to write configuration values file: %w", err)
-		}
+
+		valuesYaml = content
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "values.yaml"), valuesYaml, 0o777); err != nil {
+		return nil, fmt.Errorf("failed to write configuration values file: %w", err)
 	}
 
 	if err := os.WriteFile(filepath.Join(dir, "README.md"), readme, 0o777); err != nil {
@@ -712,11 +719,11 @@ func (r *ProductDeploymentGeneratorReconciler) hashComponentVersion(version stri
 }
 
 type Visitor struct {
-	replace *yamlast.File
+	replace *goyamlast.File
 	err     error
 }
 
-func (v *Visitor) Visit(node yamlast.Node) yamlast.Visitor {
+func (v *Visitor) Visit(node goyamlast.Node) goyamlast.Visitor {
 	// quit early if there was an error
 	if v.err != nil {
 		return v
@@ -727,7 +734,7 @@ func (v *Visitor) Visit(node yamlast.Node) yamlast.Visitor {
 		return v
 	}
 
-	path, err := yaml.PathString(node.GetPath())
+	path, err := goyaml.PathString(node.GetPath())
 	if err != nil {
 		v.err = fmt.Errorf("failed to parse path string: %w", err)
 		return v
@@ -748,7 +755,7 @@ func (v *Visitor) Visit(node yamlast.Node) yamlast.Visitor {
 	return v
 }
 
-func (r *ProductDeploymentGeneratorReconciler) fetchExistingValues(ctx context.Context, productName string, project *projectv1.Project) (*yamlast.File, error) {
+func (r *ProductDeploymentGeneratorReconciler) fetchExistingValues(ctx context.Context, productName string, project *projectv1.Project) (*goyamlast.File, error) {
 	repoName, repoNamespace, err := FetchGitRepositoryFromProjectInventory(project)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch GitRepository from project: %w", err)
@@ -768,7 +775,7 @@ func (r *ProductDeploymentGeneratorReconciler) fetchExistingValues(ctx context.C
 		return nil, fmt.Errorf("failed to fetch existing values file: %w", err)
 	}
 
-	parsedConfig, err := yamlparser.ParseBytes(content, yamlparser.ParseComments)
+	parsedConfig, err := goyamlparser.ParseBytes(content, goyamlparser.ParseComments)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse existing values file: %w", err)
 	}
