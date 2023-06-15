@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -723,6 +724,8 @@ type Visitor struct {
 	err     error
 }
 
+// Visit parses a node in the yaml structure. If it finds a node that has a comments and contains the marker,
+// it will fetch the yaml path to that value and update it in the replacement values.yaml output.
 func (v *Visitor) Visit(node goyamlast.Node) goyamlast.Visitor {
 	// quit early if there was an error
 	if v.err != nil {
@@ -734,27 +737,37 @@ func (v *Visitor) Visit(node goyamlast.Node) goyamlast.Visitor {
 		return v
 	}
 
+	if !strings.Contains(comment.String(), ignoreMarker) {
+		return v
+	}
+
 	path, err := goyaml.PathString(node.GetPath())
 	if err != nil {
 		v.err = fmt.Errorf("failed to parse path string: %w", err)
+
 		return v
 	}
 
 	replaceNode, err := path.FilterFile(v.replace)
 	if err != nil {
 		v.err = fmt.Errorf("failed to filter incoming values with path %s: %w", node.GetPath(), err)
+
 		return v
 	}
 
 	if err := replaceNode.SetComment(comment); err != nil {
+		v.err = fmt.Errorf("failed to set comment on target node: %w", err)
+
 		return v
 	}
+
 	tk := replaceNode.GetToken()
 	tk.Value = node.GetToken().Value
 
 	return v
 }
 
+// fetchExistingValues gathers existing values.yaml values. If it doesn't exist it returns an empty file and no error.
 func (r *ProductDeploymentGeneratorReconciler) fetchExistingValues(ctx context.Context, productName string, project *projectv1.Project) (*goyamlast.File, error) {
 	repoName, repoNamespace, err := FetchGitRepositoryFromProjectInventory(project)
 	if err != nil {
