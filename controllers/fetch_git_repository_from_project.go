@@ -8,6 +8,8 @@ import (
 	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 )
 
+// FetchGitRepositoryFromProjectInventory looks for the GitRepository in the project's inventory.
+// There should ever only be one.
 func FetchGitRepositoryFromProjectInventory(project *projectv1.Project) (string, string, error) {
 	// Entry ID: <namespace>_<name>_<group>_<kind>. Just look for a postfix of gitrepository
 	if project.Status.Inventory == nil {
@@ -17,7 +19,7 @@ func FetchGitRepositoryFromProjectInventory(project *projectv1.Project) (string,
 	var repoName, repoNamespace string
 	for _, e := range project.Status.Inventory.Entries {
 		split := strings.Split(e.ID, "_")
-		if len(split) < 1 {
+		if len(split) < 2 {
 			return "", "", fmt.Errorf("failed to split ID: %s", e.ID)
 		}
 

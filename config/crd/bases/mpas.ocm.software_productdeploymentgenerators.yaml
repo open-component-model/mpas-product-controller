@@ -59,7 +59,7 @@ spec:
                 type: string
               subscriptionRef:
                 description: SubscriptionRef contains the reference to the component
-                  subscription from we generate the ProductDeployment.
+                  subscription from which the ProductDeployment is generated.
                 properties:
                   name:
                     description: Name of the referent.
@@ -149,8 +149,8 @@ spec:
                   type: object
                 type: array
               lastReconciledVersion:
-                description: LastReconciledVersion contains the version that was used
-                  to generate the ProductDeployment from the ComponentSubscription.
+                description: LastReconciledVersion contains the ComponentSubscription's
+                  version that was used to generate the ProductDeployment.
                 type: string
               latestSnapshotDigest:
                 type: string

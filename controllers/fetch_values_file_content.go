@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/fluxcd/pkg/untar"
 	v1 "github.com/fluxcd/source-controller/api/v1"
@@ -15,9 +14,6 @@ import (
 
 // FetchValuesFileContent takes a product name and a GitRepository artifact to fetch a values file if it exists.
 func FetchValuesFileContent(ctx context.Context, productName string, artifact *v1.Artifact) (_ []byte, err error) {
-	ctx, done := context.WithTimeout(ctx, 10*time.Second)
-	defer done()
-
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, artifact.URL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct request: %w", err)
