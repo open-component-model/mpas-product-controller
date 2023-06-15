@@ -18,7 +18,7 @@ type ProductDeploymentGeneratorSpec struct {
 	// +required
 	Interval metav1.Duration `json:"interval"`
 
-	// SubscriptionRef contains the reference to the component subscription from we generate the ProductDeployment.
+	// SubscriptionRef contains the reference to the component subscription from which the ProductDeployment is generated.
 	// +required
 	SubscriptionRef meta.NamespacedObjectReference `json:"subscriptionRef"`
 
@@ -48,7 +48,7 @@ type ProductDeploymentGeneratorStatus struct {
 	// +optional
 	SnapshotName string `json:"snapshotName,omitempty"`
 
-	// LastReconciledVersion contains the version that was used to generate the ProductDeployment from the ComponentSubscription.
+	// LastReconciledVersion contains the ComponentSubscription's version that was used to generate the ProductDeployment.
 	// +optional
 	LastReconciledVersion string `json:"lastReconciledVersion,omitempty"`
 }
