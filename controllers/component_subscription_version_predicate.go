@@ -10,10 +10,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
+// ComponentSubscriptionVersionChangedPredicate watches a subscription for reconciled version changes.
 type ComponentSubscriptionVersionChangedPredicate struct {
 	predicate.Funcs
 }
 
+// Update will check the new subscription has a new LastAppliedVersion. If yes, it will trigger a reconcile event.
 func (ComponentSubscriptionVersionChangedPredicate) Update(e event.UpdateEvent) bool {
 	if e.ObjectOld == nil || e.ObjectNew == nil {
 		return false
