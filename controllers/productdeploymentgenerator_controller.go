@@ -724,8 +724,8 @@ type Visitor struct {
 	err     error
 }
 
-// Visit parses a node in the yaml structure. If it finds a node that has a comments and contains the marker,
-// it will fetch the yaml path to that value and update it in the replacement values.yaml output.
+// Visit parses a node in the yaml structure. If it finds a node that has a comment and contains the marker,
+// it will fetch the yaml path pointing to that value in the replacement values.yaml file and update it.
 func (v *Visitor) Visit(node goyamlast.Node) goyamlast.Visitor {
 	// quit early if there was an error
 	if v.err != nil {

@@ -30,7 +30,9 @@ frontend:
     message: Hello, world!
     replicas: 1 #+mpas-ignore
 `
-	values, err := generateTestData(filepath.Join("products", "test-values"), []byte(testValues))
+
+	dir := t.TempDir()
+	values, err := generateTestData(dir, filepath.Join("products", "test-values"), []byte(testValues))
 	require.NoError(t, err)
 
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -48,7 +50,8 @@ frontend:
 }
 
 func TestFetchValuesFileContentFileDoesNotExist(t *testing.T) {
-	values, err := generateTestData(filepath.Join("not-products", "test-values"), []byte(`something: value`))
+	dir := t.TempDir()
+	values, err := generateTestData(dir, filepath.Join("not-products", "test-values"), []byte(`something: value`))
 	require.NoError(t, err)
 
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -78,21 +81,16 @@ func TestFetchValuesFileContentContentIsCorrupted(t *testing.T) {
 	assert.EqualError(t, err, "failed to untar artifact content: requires gzip-compressed body: unexpected EOF")
 }
 
-func generateTestData(folder string, data []byte) ([]byte, error) {
-	tmp, err := os.MkdirTemp("", "test-data")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create temp folder: %w", err)
-	}
-
-	if err := os.MkdirAll(filepath.Join(tmp, folder), 0o777); err != nil {
+func generateTestData(base, folder string, data []byte) ([]byte, error) {
+	if err := os.MkdirAll(filepath.Join(base, folder), 0o777); err != nil {
 		return nil, fmt.Errorf("failed to create folder: %w", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(tmp, folder, "values.yaml"), data, 0o777); err != nil {
+	if err := os.WriteFile(filepath.Join(base, folder, "values.yaml"), data, 0o777); err != nil {
 		return nil, fmt.Errorf("failed to write values file: %w", err)
 	}
 
-	return buildTar(tmp)
+	return buildTar(base)
 }
 
 // The source here is located at https://github.com/fluxcd/pkg/blob/2ee90dd5b2ec033f44881f160e29584cceda8f37/oci/client/build.go
