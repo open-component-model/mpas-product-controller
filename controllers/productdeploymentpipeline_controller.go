@@ -8,13 +8,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
-	v1 "github.com/fluxcd/source-controller/api/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -149,7 +147,13 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 	return ctrl.Result{}, nil
 }
 
-func (r *ProductDeploymentPipelineReconciler) createOrUpdateConfiguration(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline, owner *mpasv1alpha1.ProductDeployment, localization *ocmv1alpha1.Localization, project *projectv1.Project) (*ocmv1alpha1.Configuration, error) {
+func (r *ProductDeploymentPipelineReconciler) createOrUpdateConfiguration(
+	ctx context.Context,
+	obj *mpasv1alpha1.ProductDeploymentPipeline,
+	owner *mpasv1alpha1.ProductDeployment,
+	localization *ocmv1alpha1.Localization,
+	project *projectv1.Project,
+) (*ocmv1alpha1.Configuration, error) {
 	if obj.Spec.Configuration.Rules.Name == "" {
 		return nil, nil
 	}
@@ -176,28 +180,9 @@ func (r *ProductDeploymentPipelineReconciler) createOrUpdateConfiguration(ctx co
 	}
 
 	// get the git repository of the created repository
-
-	// Entry ID: <namespace>_<name>_<group>_<kind>. Just look for a postfix of gitrepository
-	if project.Status.Inventory == nil {
-		return nil, fmt.Errorf("project inventory is empty")
-	}
-
-	var repoName, repoNamespace string
-	for _, e := range project.Status.Inventory.Entries {
-		split := strings.Split(e.ID, "_")
-		if len(split) < 1 {
-			return nil, fmt.Errorf("failed to split ID: %s", e.ID)
-		}
-
-		if split[len(split)-1] == v1.GitRepositoryKind {
-			repoName = split[1]
-			repoNamespace = split[0]
-			break
-		}
-	}
-
-	if repoName == "" {
-		return nil, fmt.Errorf("gitrepository not found in the project inventory")
+	repoName, repoNamespace, err := FetchGitRepositoryFromProjectInventory(project)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch GitRepository from project: %w", err)
 	}
 
 	configuration := &ocmv1alpha1.Configuration{

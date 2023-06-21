@@ -18,6 +18,7 @@ require (
 	github.com/fluxcd/pkg/runtime v0.35.0
 	github.com/fluxcd/pkg/untar v0.2.0
 	github.com/fluxcd/source-controller/api v1.0.0-rc.3
+	github.com/goccy/go-yaml v1.9.5
 	github.com/google/go-github/v52 v52.0.0
 	github.com/open-component-model/git-controller v0.4.1-0.20230601123445-f828dd84348a
 	github.com/open-component-model/mpas-project-controller v0.1.1
@@ -92,6 +93,7 @@ require (
 	github.com/emicklei/go-restful/v3 v3.10.1 // indirect
 	github.com/evanphx/json-patch v5.6.0+incompatible // indirect
 	github.com/evanphx/json-patch/v5 v5.6.0 // indirect
+	github.com/fatih/color v1.13.0 // indirect
 	github.com/felixge/httpsnoop v1.0.3 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.1.0 // indirect
 	github.com/fluxcd/pkg/apis/kustomize v1.0.0 // indirect
@@ -139,6 +141,8 @@ require (
 	github.com/mandelsoft/spiff v1.7.0-beta-4 // indirect
 	github.com/mandelsoft/vfs v0.0.0-20230114230722-fb9b39ce80b9 // indirect
 	github.com/marstr/guid v1.1.0 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.18 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/miekg/pkcs11 v1.1.1 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
@@ -197,6 +201,7 @@ require (
 	golang.org/x/text v0.9.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	golang.org/x/tools v0.8.0 // indirect
+	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect

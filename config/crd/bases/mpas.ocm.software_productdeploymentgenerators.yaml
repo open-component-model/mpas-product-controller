@@ -58,8 +58,8 @@ spec:
                   No other auth option is defined. https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/#add-imagepullsecrets-to-a-service-account
                 type: string
               subscriptionRef:
-                description: NamespacedObjectReference contains enough information
-                  to locate the referenced Kubernetes resource object in any namespace.
+                description: SubscriptionRef contains the reference to the component
+                  subscription from which the ProductDeployment is generated.
                 properties:
                   name:
                     description: Name of the referent.
@@ -148,6 +148,10 @@ spec:
                   - type
                   type: object
                 type: array
+              lastReconciledVersion:
+                description: LastReconciledVersion contains the ComponentSubscription's
+                  version that was used to generate the ProductDeployment.
+                type: string
               latestSnapshotDigest:
                 type: string
               observedGeneration:
