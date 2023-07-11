@@ -35,6 +35,9 @@ const (
 	// CreateSnapshotFailedReason is used when we fail to create an ocm-controller.Snapshot object in the cluster.
 	CreateSnapshotFailedReason = "CreateSnapshotFailed"
 
+	// CommitTemplateEmptyReason is used when a the commit template is not set.
+	CommitTemplateEmptyReason = "CommitTemplateEmpty"
+
 	// CreateComponentVersionFailedReason is used when we fail to create an ocm-controller.ComponentVersion object in the cluster.
 	CreateComponentVersionFailedReason = "CreateComponentVersionFailed"
 
