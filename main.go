@@ -11,6 +11,7 @@ import (
 	"github.com/fluxcd/source-controller/api/v1beta2"
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
 	gitmpasv1alpha1 "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
+	"github.com/open-component-model/mpas-product-controller/pkg/validators/gitea"
 	"github.com/open-component-model/mpas-product-controller/pkg/validators/github"
 	v1alpha12 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	"github.com/open-component-model/ocm-controller/pkg/oci"
@@ -62,7 +63,9 @@ func main() {
 	var probeAddr string
 	var ociRegistryAddr string
 	var mpasSystemNamespace string
+	var ociRegistryCertSecretName string
 
+	flag.StringVar(&ociRegistryCertSecretName, "certificate-secret-name", "registry-certs", "")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -92,7 +95,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	cache := oci.NewClient(ociRegistryAddr)
+	cache := oci.NewClient(ociRegistryAddr,
+		oci.WithClient(mgr.GetClient()),
+		oci.WithNamespace(mpasSystemNamespace),
+		oci.WithCertificateSecret(ociRegistryCertSecretName),
+	)
 	snapshotWriter := snapshot.NewOCIWriter(mgr.GetClient(), cache, mgr.GetScheme())
 	ocmClient := ocm.NewClient(mgr.GetClient())
 	if err = (&controllers.ProductDeploymentGeneratorReconciler{
@@ -132,7 +139,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	githubValidator := github.NewValidator(mgr.GetClient(), nil)
+	giteaValidator := gitea.NewValidator(mgr.GetClient(), nil)
+	githubValidator := github.NewValidator(mgr.GetClient(), giteaValidator)
 	if err = (&controllers.ValidationReconciler{
 		Client:              mgr.GetClient(),
 		Scheme:              mgr.GetScheme(),
