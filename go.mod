@@ -23,11 +23,11 @@ require (
 	github.com/fluxcd/source-controller/api v1.0.0-rc.3
 	github.com/goccy/go-yaml v1.9.5
 	github.com/google/go-github/v52 v52.0.0
-	github.com/open-component-model/git-controller v0.4.1-0.20230601123445-f828dd84348a
+	github.com/open-component-model/git-controller v0.5.0
 	github.com/open-component-model/mpas-project-controller v0.1.1
 	github.com/open-component-model/ocm v0.3.0-rc.3
-	github.com/open-component-model/ocm-controller v0.9.0
-	github.com/open-component-model/replication-controller v0.3.1
+	github.com/open-component-model/ocm-controller v0.10.0
+	github.com/open-component-model/replication-controller v0.4.0
 	github.com/open-policy-agent/opa v0.53.0
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/stretchr/testify v1.8.3
@@ -189,7 +189,7 @@ require (
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.2 // indirect
-	github.com/hashicorp/go-version v1.2.1 // indirect
+	github.com/hashicorp/go-version v1.6.0 // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
