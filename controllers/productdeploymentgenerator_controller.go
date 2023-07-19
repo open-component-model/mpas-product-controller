@@ -154,37 +154,6 @@ func (r *ProductDeploymentGeneratorReconciler) Reconcile(ctx context.Context, re
 			return
 		}
 
-		if condition := conditions.Get(obj, meta.StalledCondition); condition != nil && condition.Status == metav1.ConditionTrue {
-			conditions.Delete(obj, meta.ReconcilingCondition)
-		}
-
-		// Check if it's a successful reconciliation.
-		// We don't set Requeue in case of error, so we can safely check for Requeue.
-		if result.RequeueAfter == obj.GetRequeueAfter() && !result.Requeue && err == nil {
-			// Remove the reconciling condition if it's set.
-			conditions.Delete(obj, meta.ReconcilingCondition)
-
-			// Set the return err as the ready failure message if the resource is not ready, but also not reconciling or stalled.
-			if ready := conditions.Get(obj, meta.ReadyCondition); ready != nil && ready.Status == metav1.ConditionFalse && !conditions.IsStalled(obj) {
-				err = errors.New(conditions.GetMessage(obj, meta.ReadyCondition))
-			}
-		}
-
-		// If still reconciling then reconciliation did not succeed, set to ProgressingWithRetry to
-		// indicate that reconciliation will be retried.
-		if conditions.IsReconciling(obj) {
-			reconciling := conditions.Get(obj, meta.ReconcilingCondition)
-			reconciling.Reason = meta.ProgressingWithRetryReason
-			conditions.Set(obj, reconciling)
-		}
-
-		// If not reconciling or stalled than mark Ready=True
-		if !conditions.IsReconciling(obj) &&
-			!conditions.IsStalled(obj) &&
-			err == nil &&
-			result.RequeueAfter == obj.GetRequeueAfter() {
-			conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
-		}
 		// Set status observed generation option if the component is stalled or ready.
 		if conditions.IsStalled(obj) || conditions.IsReady(obj) {
 			obj.Status.ObservedGeneration = obj.Generation
@@ -204,7 +173,7 @@ func (r *ProductDeploymentGeneratorReconciler) Reconcile(ctx context.Context, re
 	return r.reconcile(ctx, obj)
 }
 
-func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator) (ctrl.Result, error) {
+func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator) (_ ctrl.Result, err error) {
 	logger := log.FromContext(ctx)
 	subscription := &replicationv1.ComponentSubscription{}
 
@@ -237,6 +206,8 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		}
 
 		if lastReconciledSubscription.Equal(lastReconciledGeneratorVersion) || lastReconciledSubscription.LessThan(lastReconciledGeneratorVersion) {
+			conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
+
 			logger.Info("data generator version is greater than or equal to last reconciled subscription version", "generator", lastReconciledGeneratorVersion.Original(), "subscription", lastReconciledSubscription.Original())
 			return ctrl.Result{}, nil
 		}
@@ -279,7 +250,11 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 		return ctrl.Result{}, fmt.Errorf("failed to authenticate using service account: %w", err)
 	}
-	defer cv.Close()
+	defer func() {
+		if cerr := cv.Close(); cerr != nil {
+			err = errors.Join(err, cerr)
+		}
+	}()
 
 	logger.Info("retrieved component version, fetching ProductDescription resource", "component", cv.GetName())
 
@@ -304,7 +279,11 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{}, fmt.Errorf("failed to create temp folder: %w", err)
 	}
 
-	defer os.RemoveAll(dir)
+	defer func() {
+		if oerr := os.RemoveAll(dir); oerr != nil {
+			err = errors.Join(err, oerr)
+		}
+	}()
 
 	// Create top-level product folder.
 	if err := os.Mkdir(filepath.Join(dir, obj.Name), 0o777); err != nil {
@@ -339,6 +318,8 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	}
 
 	if project.Spec.Git.CommitTemplate == nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CommitTemplateEmptyReason, err.Error())
+
 		return ctrl.Result{}, fmt.Errorf("commit template in project cannot be empty")
 	}
 
@@ -430,6 +411,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	}
 
 	obj.Status.LastReconciledVersion = component.Version
+	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
 
 	return ctrl.Result{}, nil
 }

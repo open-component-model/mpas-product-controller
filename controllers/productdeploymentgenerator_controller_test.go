@@ -497,7 +497,8 @@ func (m *mockComponent) GetResource(id ocmmetav1.Identity) (ocm.ResourceAccess, 
 }
 
 func (m *mockComponent) Repository() ocm.Repository {
-	return &genericocireg.Repository{}
+	repository, _ := genericocireg.NewRepository(nil, nil, nil)
+	return repository
 }
 
 func (m *mockComponent) Dup() (ocm.ComponentVersionAccess, error) {
@@ -527,6 +528,10 @@ func (r *mockResource) AccessMethod() (ocm.AccessMethod, error) {
 		return nil, err
 	}
 	return spec.AccessMethod(ca)
+}
+
+func (r *mockResource) ComponentVersion() ocm.ComponentVersionAccess {
+	return nil
 }
 
 func (r *mockResource) Meta() *ocm.ResourceMeta {

@@ -36,14 +36,13 @@ spec:
             description: ProductDeploymentSpec defines the desired state of ProductDeployment.
             properties:
               component:
-                description: Component gathers together reconciled information about
-                  a component.
+                description: Component holds information about a reconciled component.
                 properties:
                   name:
+                    description: Name specifies the component name.
                     type: string
                   registry:
-                    description: Registry defines information about the location of
-                      a component.
+                    description: Version specifies the component registry.
                     properties:
                       url:
                         type: string
@@ -51,6 +50,7 @@ spec:
                     - url
                     type: object
                   version:
+                    description: Version specifies the component version.
                     type: string
                 required:
                 - name

@@ -10,6 +10,7 @@ replace github.com/opencontainers/go-digest => github.com/opencontainers/go-dige
 replace go.opentelemetry.io/otel/metric => go.opentelemetry.io/otel/metric v0.35.0
 
 require (
+	code.gitea.io/sdk/gitea v0.15.1
 	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/containers/image/v5 v5.23.0
 	github.com/distribution/distribution/v3 v3.0.0-20230327091844-0c958010ace2
@@ -186,6 +187,7 @@ require (
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.2 // indirect
+	github.com/hashicorp/go-version v1.6.0 // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
@@ -331,9 +333,7 @@ replace github.com/open-component-model/ocm-controller => ../ocm-controller
 
 replace github.com/open-component-model/replication-controller => ../replication-controller
 
-//replace github.com/open-component-model/git-controller => ../git-controller
-
-//replace github.com/open-component-model/ocm v0.3.0-rc.2 => github.com/open-component-model/ocm v0.3.0-rc.1.0.20230408161516-7bac90d616ab
+replace github.com/open-component-model/git-controller => ../git-controller
 
 replace github.com/open-component-model/ocm => ../ocm
 
