@@ -200,7 +200,7 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	data, err := FetchValuesFileContent(ctx, owners[0].Name, artifact)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to fetch artifact content from git repositroy: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to fetch artifact content from git repository: %w", err)
 	}
 
 	valuesData := make(map[string]any)
@@ -302,7 +302,7 @@ func (r *ValidationReconciler) deleteGitRepository(ctx context.Context, ref *met
 			return nil
 		}
 
-		return fmt.Errorf("failed to find GitRepositroy object: %w", err)
+		return fmt.Errorf("failed to find GitRepository object: %w", err)
 	}
 
 	return r.Delete(ctx, repo)

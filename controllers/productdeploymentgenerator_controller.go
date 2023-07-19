@@ -208,6 +208,8 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	logger := log.FromContext(ctx)
 	subscription := &replicationv1.ComponentSubscription{}
 
+	fmt.Println(fmt.Sprintf("sources/mpas-product-controller/controllers/productdeploymentgenerator_controller.go"))
+	fmt.Println(fmt.Sprintf("obj.Spec.SubscriptionRef.Name %s obj.Spec.SubscriptionRef.Namespace %s obj.Spec.ServiceAccountName %s", obj.Spec.SubscriptionRef.Name, obj.Spec.SubscriptionRef.Namespace, obj.Spec.ServiceAccountName))
 	if err := r.Get(ctx, types.NamespacedName{
 		Name:      obj.Spec.SubscriptionRef.Name,
 		Namespace: obj.Spec.SubscriptionRef.Namespace,
@@ -239,6 +241,8 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 			return ctrl.Result{}, nil
 		}
 	}
+
+	fmt.Println("r.MpasSystemNamespace", r.MpasSystemNamespace)
 
 	project, err := GetProjectInNamespace(ctx, r.Client, r.MpasSystemNamespace)
 	if err != nil {
@@ -308,6 +312,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	}
 
 	productFolder := filepath.Join(dir, obj.Name)
+	fmt.Println("productFolder ", productFolder)
 
 	validationRules := make([]v1alpha1.ValidationData, 0)
 
