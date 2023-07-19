@@ -6,6 +6,8 @@ replace oras.land/oras-go => oras.land/oras-go v1.2.3
 
 replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20220411205349-bde1400a84be
 
+replace github.com/google/go-containerregistry => github.com/google/go-containerregistry v0.14.1-0.20230409045903-ed5c185df419
+
 // rego requires this version of open telemetry for the package syncint64
 replace go.opentelemetry.io/otel/metric => go.opentelemetry.io/otel/metric v0.35.0
 
@@ -21,11 +23,11 @@ require (
 	github.com/fluxcd/source-controller/api v1.0.0-rc.3
 	github.com/goccy/go-yaml v1.9.5
 	github.com/google/go-github/v52 v52.0.0
-	github.com/open-component-model/git-controller v0.4.1-0.20230601123445-f828dd84348a
+	github.com/open-component-model/git-controller v0.5.0
 	github.com/open-component-model/mpas-project-controller v0.1.1
 	github.com/open-component-model/ocm v0.3.0-rc.3
 	github.com/open-component-model/ocm-controller v0.10.0
-	github.com/open-component-model/replication-controller v0.2.1-0.20230420172740-670e1238a8c7
+	github.com/open-component-model/replication-controller v0.4.0
 	github.com/open-policy-agent/opa v0.53.0
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/stretchr/testify v1.8.3
