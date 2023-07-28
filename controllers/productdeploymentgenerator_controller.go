@@ -448,6 +448,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	var readme []byte
 
 	for _, p := range prodDesc.Spec.Pipelines {
+		fmt.Println("", p.Name)
 		pipe, instructions, err := r.createProductPipeline(ctx, prodDesc, p, cv, values)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create product pipeline: %w", err)

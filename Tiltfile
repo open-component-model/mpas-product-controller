@@ -28,6 +28,10 @@ settings.update(read_yaml(
     default = {},
 ))
 
+print('applying generated secrets')
+k8s_yaml('./hack/certs/registry_certs_secret.yaml')
+
+
 # Use kustomize to build the install yaml files
 install = kustomize('config/default')
 
@@ -88,7 +92,7 @@ docker_build_with_restart(
     entrypoint = entrypoint,
     only=[
       './bin',
-      'hack/entrypoint.sh',
+      './hack/entrypoint.sh',
     ],
     live_update = [
         sync('./bin/manager', '/manager'),
