@@ -27,10 +27,9 @@ settings.update(read_yaml(
     tilt_file,
     default = {},
 ))
-
-print('applying generated secrets')
-k8s_yaml('./hack/certs/registry_certs_secret.yaml')
-
+# https registry
+print('applying generated secrets mpas-product-controller')
+k8s_yaml(['../MPAS/hack/certs/registry_certs_secret_mpas.yaml','../MPAS/hack/certs/registry_certs_secret_ocm.yaml'], allow_duplicates=True)
 
 # Use kustomize to build the install yaml files
 install = kustomize('config/default')
@@ -65,7 +64,7 @@ load('ext://restart_process', 'docker_build_with_restart')
 # binary is rebuilt and the hot swat wrapper takes care of the rest.
 local_resource(
     'mpas-product-controller-binary',
-    'CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/manager ./',
+    'CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -o bin/manager ./',
     deps = [
         "main.go",
         "go.mod",
