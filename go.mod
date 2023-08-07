@@ -15,6 +15,14 @@ replace k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.26.3
 
 replace github.com/stretchr/testify => github.com/stretchr/testify v1.8.2
 
+replace sigs.k8s.io/controller-runtime v0.15.0 => sigs.k8s.io/controller-runtime v0.14.6
+
+replace k8s.io/client-go => k8s.io/client-go v0.26.3
+
+replace k8s.io/api => k8s.io/api v0.26.3
+
+replace github.com/stretchr/testify v1.8.3 => github.com/stretchr/testify v1.8.2
+
 require (
 	code.gitea.io/sdk/gitea v0.15.1
 	github.com/Masterminds/semver/v3 v3.2.1
