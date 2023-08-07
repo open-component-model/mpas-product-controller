@@ -19,14 +19,11 @@ import (
 // SelectTarget selects a target based on the provided filtering options.
 func (r *ProductDeploymentPipelineScheduler) SelectTarget(ctx context.Context, role v1alpha1.TargetRole, namespace string) (v1alpha1.Target, error) {
 	targetList := &v1alpha1.TargetList{}
-	fmt.Println("/Users/d072443/SAPDevelop/home/rpc_workspace/sources/mpas-product-controller/controllers/select_target.go ")
-	fmt.Println(fmt.Sprintf("role: %s, role.Type: %s namespace: %s", role.Selector.String(), role.Type, namespace))
 
 	m, err := v1.LabelSelectorAsSelector(&role.Selector)
 	if err != nil {
 		return v1alpha1.Target{}, fmt.Errorf("failed to parse label selectors to map: %w", err)
 	}
-	fmt.Print(fmt.Sprintf(m.String()))
 
 	// We can't use client.MatchingFields for spec.type since we don't have a controller for Target
 	// and thus, we can't index the type field.
@@ -39,7 +36,6 @@ func (r *ProductDeploymentPipelineScheduler) SelectTarget(ctx context.Context, r
 
 	var targets []v1alpha1.Target
 	for _, target := range targetList.Items {
-		fmt.Println(fmt.Sprintf("target.Name: %s, target.Spec.Type: %s ", target.Name, target.Spec.Type))
 		if target.Spec.Type == role.Type {
 			targets = append(targets, target)
 		}

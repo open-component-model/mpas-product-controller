@@ -177,9 +177,6 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	logger := log.FromContext(ctx)
 	subscription := &replicationv1.ComponentSubscription{}
 
-	fmt.Println(fmt.Sprintf("%s sources/mpas-product-controller/controllers/productdeploymentgenerator_controller.go ---------------------------------", obj.Name))
-	fmt.Println(fmt.Sprintf("obj.Name %s obj.Spec.SubscriptionRef.Name %s obj.Spec.SubscriptionRef.Namespace %s obj.Spec.ServiceAccountName %s", obj.Name, obj.Spec.SubscriptionRef.Name,
-		obj.Spec.SubscriptionRef.Namespace, obj.Spec.ServiceAccountName))
 	if err := r.Get(ctx, types.NamespacedName{
 		Name:      obj.Spec.SubscriptionRef.Name,
 		Namespace: obj.Spec.SubscriptionRef.Namespace,
@@ -189,15 +186,11 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{}, fmt.Errorf("failed to find subscription object: %w", err)
 	}
 
-	fmt.Println("obj.Name %s Reached 2", obj.Name)
-
 	if !conditions.IsReady(subscription) {
 		logger.Info("referenced subscription isn't ready yet, requeuing")
 
 		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 	}
-
-	fmt.Println("obj.Name %s Reached 3", obj.Name)
 
 	if obj.Status.LastReconciledVersion != "" {
 		lastReconciledGeneratorVersion, err := semver.NewVersion(obj.Status.LastReconciledVersion)
@@ -218,29 +211,24 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		}
 	}
 
-	fmt.Println("obj.Name %s Reached 4", obj.Name)
-
 	project, err := GetProjectInNamespace(ctx, r.Client, r.MpasSystemNamespace)
 	if err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to find the project in the namespace: %w", err)
 	}
-	fmt.Println("obj.Name %s Reached 5", obj.Name)
 
 	if !conditions.IsReady(project) {
 		logger.Info("project not ready yet")
 
 		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 	}
-	fmt.Println("obj.Name %s Reached 6", obj.Name)
 
 	if project.Status.RepositoryRef == nil {
 		logger.Info("no repository information is provided yet")
 
 		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 	}
-	fmt.Println("obj.Name %s Reached 7", obj.Name)
 
 	component := subscription.GetComponentVersion()
 	logger.Info("fetching component", "component", component)
@@ -251,14 +239,12 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 		return ctrl.Result{}, fmt.Errorf("failed to authenticate using service account: %w", err)
 	}
-	fmt.Println("obj.Name %s Reached 8", obj.Name)
 	cv, err := r.OCMClient.GetComponentVersion(ctx, octx, component.Registry.URL, component.Name, component.Version)
 	if err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ComponentVersionGetFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to authenticate using service account: %w", err)
 	}
-	fmt.Println("obj.Name %s Reached 9", obj.Name)
 	defer func() {
 		if cerr := cv.Close(); cerr != nil {
 			err = errors.Join(err, cerr)
@@ -267,16 +253,12 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 	logger.Info("retrieved component version, fetching ProductDescription resource", "component", cv.GetName())
 
-	fmt.Println("obj.Name %s Reached 10", obj.Name)
-
 	content, err := r.OCMClient.GetProductDescription(ctx, octx, cv)
 	if err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to get product description data: %w", err)
 	}
-
-	fmt.Println("obj.Name %s Reached 11", obj.Name)
 
 	prodDesc := &v1alpha1.ProductDescription{}
 	if err := kyaml.Unmarshal(content, prodDesc); err != nil {
@@ -287,14 +269,10 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 	logger.Info("fetched product description", "description", klog.KObj(prodDesc))
 
-	fmt.Println("obj.Name %s Reached 12", obj.Name)
-
 	dir, err := os.MkdirTemp("", "product-deployment")
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to create temp folder: %w", err)
 	}
-
-	fmt.Println("obj.Name %s Reached 13", obj.Name)
 
 	defer func() {
 		if oerr := os.RemoveAll(dir); oerr != nil {
@@ -308,9 +286,6 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	}
 
 	productFolder := filepath.Join(dir, obj.Name)
-	fmt.Println("productFolder ", productFolder)
-
-	fmt.Println("obj.Name %s Reached 14", obj.Name)
 
 	validationRules := make([]v1alpha1.ValidationData, 0)
 
@@ -328,8 +303,6 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{}, fmt.Errorf("failed to create product deployment: %w", err)
 	}
 
-	fmt.Println("obj.Name %s Reached 15", obj.Name)
-
 	// Note that we pass in the top level folder here.
 	snapshotName, err := r.createSnapshot(ctx, obj, productDeployment, component, dir)
 	if err != nil {
@@ -338,15 +311,11 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{}, fmt.Errorf("failed to create snapshot for product deployment: %w", err)
 	}
 
-	fmt.Println("obj.Name %s Reached 16", obj.Name)
-
 	if project.Spec.Git.CommitTemplate == nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CommitTemplateEmptyReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("commit template in project cannot be empty")
 	}
-
-	fmt.Println("obj.Name %s Reached 17", obj.Name)
 
 	repositoryRef := project.Status.RepositoryRef.Name
 	if v := obj.Spec.RepositoryRef; v != nil {
@@ -355,7 +324,6 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 	hashedVersion := r.hashComponentVersion(component.Version)
 
-	fmt.Println("obj.Name %s Reached 18", obj.Name)
 	sync := &gitv1alpha1.Sync{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      obj.Name + "-sync-" + hashedVersion,
@@ -386,7 +354,6 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 			SubPath:                      "products/.",
 		},
 	}
-	fmt.Println("obj.Name %s Reached 19", obj.Name)
 
 	if _, err := ctrl.CreateOrUpdate(ctx, r.Client, sync, func() error {
 		if sync.ObjectMeta.CreationTimestamp.IsZero() {
@@ -401,7 +368,6 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 		return ctrl.Result{}, fmt.Errorf("failed to create sync request: %w", err)
 	}
-	fmt.Println("obj.Name %s Reached 20", obj.Name)
 
 	// Create the Validation Object.
 	validation := &v1alpha1.Validation{
@@ -437,7 +403,6 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 		return ctrl.Result{}, fmt.Errorf("failed to create validation request: %w", err)
 	}
-	fmt.Println("obj.Name %s Reached 21", obj.Name)
 
 	obj.Status.LastReconciledVersion = component.Version
 	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
@@ -477,8 +442,6 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	var readme []byte
 
 	for _, p := range prodDesc.Spec.Pipelines {
-		fmt.Println("prodDesc.Name, p.Name ", prodDesc.Name, p.Name)
-
 		pipe, instructions, err := r.createProductPipeline(ctx, prodDesc, p, cv, values)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create product pipeline: %w", err)
