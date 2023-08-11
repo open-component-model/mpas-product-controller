@@ -58,7 +58,7 @@ func (r *ProductDeploymentPipelineScheduler) Reconcile(ctx context.Context, req 
 	}
 
 	if !conditions.IsReady(obj) || obj.Status.SnapshotRef == nil || obj.Status.SnapshotRef.Name == "" {
-		logger.Info("pipeline not ready yet to be scheduler")
+		logger.Info("pipeline not ready yet to be scheduled")
 
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
@@ -82,7 +82,7 @@ func (r *ProductDeploymentPipelineScheduler) Reconcile(ctx context.Context, req 
 		}
 	}()
 
-	target, err := r.SelectTarget(ctx, obj.Spec.TargetRole, r.MpasSystemNamespace)
+	target, err := r.SelectTarget(ctx, obj.Spec.TargetRole, obj.Namespace)
 	if err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.PipelineDeploymentFailedReason, err.Error())
 
