@@ -55,6 +55,48 @@ func TestTargetSelection(t *testing.T) {
 			},
 		},
 		{
+			name: "fallback to mpas-system",
+			targets: []client.Object{
+				&v1alpha1.Target{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "kube-target-1",
+						Namespace: "ocm-system", // to verify that there are targets just not in the default namespace
+						Labels: map[string]string{
+							"label1": "value",
+						},
+					},
+					Spec: v1alpha1.TargetSpec{
+						Type:   v1alpha1.Kubernetes,
+						Access: nil,
+					},
+				},
+				&v1alpha1.Target{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "kube-target-2",
+						Namespace: "mpas-system",
+						Labels: map[string]string{
+							"label1": "value",
+						},
+					},
+					Spec: v1alpha1.TargetSpec{
+						Type:   v1alpha1.Kubernetes,
+						Access: nil,
+					},
+				},
+			},
+			role: v1alpha1.TargetRole{
+				Type: v1alpha1.Kubernetes,
+				Selector: metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"label1": "value",
+					},
+				},
+			},
+			result: v1alpha1.Target{
+				ObjectMeta: metav1.ObjectMeta{Name: "kube-target-2", Namespace: "mpas-system"},
+			},
+		},
+		{
 			name: "multiple targets of same type",
 			targets: []client.Object{
 				&v1alpha1.Target{
@@ -308,6 +350,7 @@ func TestTargetSelection(t *testing.T) {
 				assert.Equal(t, target.Spec.Type, tc.result.Spec.Type)
 			} else {
 				assert.Equal(t, target.Name, tc.result.Name)
+				assert.Equal(t, target.Namespace, tc.result.Namespace)
 			}
 		})
 	}
