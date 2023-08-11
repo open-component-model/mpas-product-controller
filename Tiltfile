@@ -61,7 +61,7 @@ load('ext://restart_process', 'docker_build_with_restart')
 # binary is rebuilt and the hot swat wrapper takes care of the rest.
 local_resource(
     'mpas-product-controller-binary',
-    'CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/manager ./',
+    'CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -o bin/manager ./',
     deps = [
         "main.go",
         "go.mod",
@@ -88,7 +88,7 @@ docker_build_with_restart(
     entrypoint = entrypoint,
     only=[
       './bin',
-      'hack/entrypoint.sh',
+      './hack/entrypoint.sh',
     ],
     live_update = [
         sync('./bin/manager', '/manager'),
