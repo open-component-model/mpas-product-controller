@@ -27,9 +27,6 @@ settings.update(read_yaml(
     tilt_file,
     default = {},
 ))
-# https registry
-print('applying generated secrets mpas-product-controller')
-k8s_yaml(['../MPAS/hack/certs/registry_certs_secret_mpas.yaml','../MPAS/hack/certs/registry_certs_secret_ocm.yaml'], allow_duplicates=True)
 
 # Use kustomize to build the install yaml files
 install = kustomize('config/default')

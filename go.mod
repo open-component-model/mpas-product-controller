@@ -11,18 +11,6 @@ replace github.com/google/go-containerregistry => github.com/google/go-container
 // rego requires this version of open telemetry for the package syncint64
 replace go.opentelemetry.io/otel/metric => go.opentelemetry.io/otel/metric v0.35.0
 
-replace k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.26.3
-
-replace github.com/stretchr/testify => github.com/stretchr/testify v1.8.2
-
-replace sigs.k8s.io/controller-runtime v0.15.0 => sigs.k8s.io/controller-runtime v0.14.6
-
-replace k8s.io/client-go => k8s.io/client-go v0.26.3
-
-replace k8s.io/api => k8s.io/api v0.26.3
-
-replace github.com/stretchr/testify v1.8.3 => github.com/stretchr/testify v1.8.2
-
 require (
 	code.gitea.io/sdk/gitea v0.15.1
 	github.com/Masterminds/semver/v3 v3.2.1
@@ -48,13 +36,13 @@ require (
 	golang.org/x/oauth2 v0.8.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/api v0.27.2
-	k8s.io/apiextensions-apiserver v0.27.2
-	k8s.io/apimachinery v0.27.2
-	k8s.io/client-go v0.27.2
+	k8s.io/api v0.26.3
+	k8s.io/apiextensions-apiserver v0.26.3
+	k8s.io/apimachinery v0.26.3
+	k8s.io/client-go v0.26.3
 	k8s.io/klog/v2 v2.100.1
 	k8s.io/utils v0.0.0-20230313181309-38a27ef9d749
-	sigs.k8s.io/controller-runtime v0.15.0
+	sigs.k8s.io/controller-runtime v0.14.6
 )
 
 require (
@@ -160,7 +148,7 @@ require (
 	github.com/go-jose/go-jose/v3 v3.0.0 // indirect
 	github.com/go-logr/logr v1.2.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-logr/zapr v1.2.4 // indirect
+	github.com/go-logr/zapr v1.2.3 // indirect
 	github.com/go-openapi/analysis v0.21.4 // indirect
 	github.com/go-openapi/errors v0.20.3 // indirect
 	github.com/go-openapi/jsonpointer v0.19.6 // indirect
@@ -243,7 +231,7 @@ require (
 	github.com/mozillazg/docker-credential-acr-helper v0.3.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
-	github.com/onsi/gomega v1.27.7 // indirect
+	github.com/onsi/gomega v1.27.6 // indirect
 	github.com/open-component-model/ocm-controllers-sdk v0.1.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.0-rc3 // indirect
@@ -259,6 +247,7 @@ require (
 	github.com/prometheus/common v0.42.0 // indirect
 	github.com/prometheus/procfs v0.9.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
+	github.com/rogpeppe/go-internal v1.10.0 // indirect
 	github.com/sassoftware/relic v7.2.1+incompatible // indirect
 	github.com/secure-systems-lab/go-securesystemslib v0.6.0 // indirect
 	github.com/segmentio/ksuid v1.0.4 // indirect
@@ -318,7 +307,7 @@ require (
 	golang.org/x/time v0.3.0 // indirect
 	golang.org/x/tools v0.9.3 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
-	gomodules.xyz/jsonpatch/v2 v2.3.0 // indirect
+	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
 	google.golang.org/api v0.121.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect
@@ -329,8 +318,8 @@ require (
 	gopkg.in/square/go-jose.v2 v2.6.0 // indirect
 	helm.sh/helm/v3 v3.11.1 // indirect
 	k8s.io/cli-runtime v0.26.3 // indirect
-	k8s.io/component-base v0.27.2 // indirect
-	k8s.io/kube-openapi v0.0.0-20230501164219-8b0f38b5fd1f // indirect
+	k8s.io/component-base v0.26.3 // indirect
+	k8s.io/kube-openapi v0.0.0-20230228151317-19cbebb19cb7 // indirect
 	oras.land/oras-go v1.2.3 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/kustomize/api v0.12.1 // indirect
