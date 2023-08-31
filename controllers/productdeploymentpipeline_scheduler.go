@@ -87,11 +87,6 @@ func (r *ProductDeploymentPipelineScheduler) Reconcile(ctx context.Context, req 
 
 	// Always attempt to patch the object and status after each reconciliation.
 	defer func() {
-		// Patching has not been set up, or the controller errored earlier.
-		if objPatcher == nil {
-			return
-		}
-
 		if perr := objPatcher.Patch(ctx, obj); perr != nil {
 			err = errors.Join(err, perr)
 		}
