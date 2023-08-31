@@ -222,11 +222,9 @@ func (r *ProductDeploymentReconciler) createOrUpdateComponentVersion(ctx context
 			Namespace: obj.Namespace,
 		},
 		Spec: ocmv1alpha1.ComponentVersionSpec{
-			Interval:  metav1.Duration{Duration: 10 * time.Minute}, //TODO: think about this
+			// Note: The interval here doesn't matter because we always pin to a specific version anyway.
+			Interval:  metav1.Duration{Duration: 10 * time.Minute},
 			Component: obj.Spec.Component.Name,
-			Version: ocmv1alpha1.Version{
-				Semver: obj.Spec.Component.Version,
-			},
 			Repository: ocmv1alpha1.Repository{
 				URL: obj.Spec.Component.Registry.URL,
 			},
@@ -243,6 +241,10 @@ func (r *ProductDeploymentReconciler) createOrUpdateComponentVersion(ctx context
 			if err := controllerutil.SetOwnerReference(obj, cv, r.Scheme); err != nil {
 				return fmt.Errorf("failed to set owner to sync object: %w", err)
 			}
+		}
+
+		cv.Spec.Version = ocmv1alpha1.Version{
+			Semver: obj.Spec.Component.Version,
 		}
 
 		return nil
