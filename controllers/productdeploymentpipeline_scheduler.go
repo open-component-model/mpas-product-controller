@@ -77,6 +77,12 @@ func (r *ProductDeploymentPipelineScheduler) Reconcile(ctx context.Context, req 
 		return ctrl.Result{}, fmt.Errorf("failed to retrieve snapshot object: %w", err)
 	}
 
+	if !conditions.IsTrue(snapshot, meta.ReadyCondition) {
+		logger.Info("snapshot found but is not ready yet, requeuing...")
+
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
 	objPatcher := patch.NewSerialPatcher(obj, r.Client)
 
 	// Always attempt to patch the object and status after each reconciliation.
