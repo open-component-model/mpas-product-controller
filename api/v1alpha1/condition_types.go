@@ -62,3 +62,8 @@ const (
 	// GitRepositoryCleanUpFailedReason is used when we couldn't delete the GitRepository.
 	GitRepositoryCleanUpFailedReason = "GitRepositoryCleanUpFailed"
 )
+
+const (
+	// DeployedCondition defines the condition when a Pipeline object has successfully been deployed.
+	DeployedCondition = "Deployed"
+)

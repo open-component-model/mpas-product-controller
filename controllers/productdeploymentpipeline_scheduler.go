@@ -13,16 +13,19 @@ import (
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
-	"github.com/open-component-model/mpas-product-controller/pkg/deployers"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	"github.com/open-component-model/ocm-controller/api/v1alpha1"
+
 	mpasv1alpha1 "github.com/open-component-model/mpas-product-controller/api/v1alpha1"
+	"github.com/open-component-model/mpas-product-controller/pkg/deployers"
 )
 
 // ProductDeploymentPipelineScheduler reconciles a ProductDeploymentPipeline object and schedules them.
@@ -57,8 +60,25 @@ func (r *ProductDeploymentPipelineScheduler) Reconcile(ctx context.Context, req 
 		return ctrl.Result{}, fmt.Errorf("failed to find pipeline deployment object: %w", err)
 	}
 
-	if !conditions.IsReady(obj) || obj.Status.SnapshotRef == nil || obj.Status.SnapshotRef.Name == "" {
-		logger.Info("pipeline not ready yet to be scheduled")
+	if obj.Status.SnapshotRef == nil || obj.Status.SnapshotRef.Name == "" {
+		logger.Info("snapshot has not yet been set up, requeuing...")
+
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+
+	snapshot := &v1alpha1.Snapshot{}
+	if err := r.Get(ctx, types.NamespacedName{Name: obj.Status.SnapshotRef.Name, Namespace: obj.Status.SnapshotRef.Namespace}, snapshot); err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.Info("snapshot not found yet, requeuing")
+
+			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		}
+
+		return ctrl.Result{}, fmt.Errorf("failed to retrieve snapshot object: %w", err)
+	}
+
+	if !conditions.IsTrue(snapshot, meta.ReadyCondition) {
+		logger.Info("snapshot found but is not ready yet, requeuing...")
 
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
@@ -67,16 +87,6 @@ func (r *ProductDeploymentPipelineScheduler) Reconcile(ctx context.Context, req 
 
 	// Always attempt to patch the object and status after each reconciliation.
 	defer func() {
-		// Patching has not been set up, or the controller errored earlier.
-		if objPatcher == nil {
-			return
-		}
-
-		// Set status observed generation option if the object is stalled or ready.
-		if conditions.IsStalled(obj) || conditions.IsReady(obj) {
-			obj.Status.ObservedGeneration = obj.Generation
-		}
-
 		if perr := objPatcher.Patch(ctx, obj); perr != nil {
 			err = errors.Join(err, perr)
 		}
@@ -84,7 +94,7 @@ func (r *ProductDeploymentPipelineScheduler) Reconcile(ctx context.Context, req 
 
 	target, err := r.SelectTarget(ctx, obj.Spec.TargetRole, obj.Namespace)
 	if err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.PipelineDeploymentFailedReason, err.Error())
+		conditions.MarkFalse(obj, mpasv1alpha1.DeployedCondition, mpasv1alpha1.PipelineDeploymentFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to select a target with the given criteria: %w", err)
 	}
@@ -96,12 +106,12 @@ func (r *ProductDeploymentPipelineScheduler) Reconcile(ctx context.Context, req 
 	}
 
 	if err := r.Deployer.Deploy(ctx, obj); err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.PipelineDeploymentFailedReason, err.Error())
+		conditions.MarkFalse(obj, mpasv1alpha1.DeployedCondition, mpasv1alpha1.PipelineDeploymentFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to deploy object to selected target: %w", err)
 	}
 
-	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
+	conditions.MarkTrue(obj, mpasv1alpha1.DeployedCondition, meta.SucceededReason, "Successfully deployed")
 
 	return ctrl.Result{}, nil
 }
