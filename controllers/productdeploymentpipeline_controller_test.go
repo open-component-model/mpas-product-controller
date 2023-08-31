@@ -221,3 +221,7 @@ targetNamespace: mpas-system
 
 	assert.True(t, conditions.IsTrue(obj, meta.ReadyCondition))
 }
+
+func TestSourceObjectUpdateStatusReconcile(t *testing.T) {
+
+}
