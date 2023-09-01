@@ -8,6 +8,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/fluxcd/pkg/runtime/patch"
 	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -96,4 +97,60 @@ func TestProductDeploymentReconciler(t *testing.T) {
 	assert.Equal(t, "manifests", pipeline.Spec.Resource.Name)
 	assert.Equal(t, "localization", pipeline.Spec.Localization.Name)
 	assert.Equal(t, "configuration", pipeline.Spec.Configuration.Rules.Name)
+}
+
+func TestComponentVersionIsUpdated(t *testing.T) {
+	deployment := &v1alpha1.ProductDeployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-deployment",
+			Namespace: "default",
+		},
+		Spec: v1alpha1.ProductDeploymentSpec{
+			Component: replicationv1.Component{
+				Name:    "github.com/test/test-component",
+				Version: "v2.0.0",
+				Registry: replicationv1.Registry{
+					URL: "ghcr.io/open-component-model/ocm",
+				},
+			},
+		},
+	}
+
+	fakeKube := env.FakeKubeClient(WithObjets(deployment), WithAddToScheme(v1alpha1.AddToScheme), WithAddToScheme(ocmv1alpha1.AddToScheme))
+
+	reconciler := ProductDeploymentReconciler{
+		Client: fakeKube,
+		Scheme: env.scheme,
+	}
+
+	_, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      deployment.Name,
+			Namespace: deployment.Namespace,
+		},
+	})
+	require.NoError(t, err)
+
+	cv := &ocmv1alpha1.ComponentVersion{}
+	err = fakeKube.Get(context.Background(), types.NamespacedName{Name: deployment.Name + "component-version", Namespace: deployment.Namespace}, cv)
+	require.NoError(t, err)
+
+	assert.Equal(t, deployment.Spec.Component.Version, cv.Spec.Version.Semver)
+
+	patcher := patch.NewSerialPatcher(deployment, fakeKube)
+	deployment.Spec.Component.Version = "v3.0.0"
+	require.NoError(t, patcher.Patch(context.Background(), deployment))
+
+	_, err = reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      deployment.Name,
+			Namespace: deployment.Namespace,
+		},
+	})
+	require.NoError(t, err)
+
+	err = fakeKube.Get(context.Background(), types.NamespacedName{Name: deployment.Name + "component-version", Namespace: deployment.Namespace}, cv)
+	require.NoError(t, err)
+
+	assert.Equal(t, deployment.Spec.Component.Version, cv.Spec.Version.Semver)
 }
