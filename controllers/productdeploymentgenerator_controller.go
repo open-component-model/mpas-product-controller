@@ -383,7 +383,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		Spec: v1alpha1.ValidationSpec{
 			ValidationRules:    validationRules,
 			ServiceAccountName: obj.Spec.ServiceAccountName,
-			Interval:           metav1.Duration{Duration: 10 * time.Second},
+			Interval:           metav1.Duration{Duration: 30 * time.Second},
 			SyncRef: meta.NamespacedObjectReference{
 				Name:      sync.Name,
 				Namespace: sync.Namespace,

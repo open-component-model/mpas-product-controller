@@ -11,4 +11,5 @@ import (
 type Validator interface {
 	FailValidation(ctx context.Context, repository gitv1alpha1.Repository, sync deliveryv1alpha1.Sync) error
 	PassValidation(ctx context.Context, repository gitv1alpha1.Repository, sync deliveryv1alpha1.Sync) error
+	IsMergedOrClosed(ctx context.Context, repository gitv1alpha1.Repository, sync deliveryv1alpha1.Sync) (bool, error)
 }

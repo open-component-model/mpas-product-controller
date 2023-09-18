@@ -8,6 +8,7 @@ import (
 	"golang.org/x/oauth2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -62,6 +63,37 @@ func (v *Validator) PassValidation(ctx context.Context, repository gitv1alpha1.R
 	}
 
 	return v.createCheckRunStatus(ctx, repository, sync.Status.PullRequestID, "success")
+}
+
+func (v *Validator) IsMergedOrClosed(ctx context.Context, repository gitv1alpha1.Repository, sync deliveryv1alpha1.Sync) (bool, error) {
+	logger := log.FromContext(ctx)
+	if repository.Spec.Provider != provider {
+		logger.Info("github validator doesn't validate provider, skipping to next", "provider", repository.Spec.Provider)
+
+		if v.Next == nil {
+			return false, fmt.Errorf("%s not supported, and no next validator configured", repository.Spec.Provider)
+		}
+
+		return v.Next.IsMergedOrClosed(ctx, repository, sync)
+	}
+
+	token, err := v.retrieveAccessToken(ctx, repository)
+	if err != nil {
+		return false, fmt.Errorf("failed to retrieve token: %w", err)
+	}
+
+	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: string(token)})
+	tc := oauth2.NewClient(context.Background(), ts)
+
+	g := ggithub.NewClient(tc)
+
+	pr, _, err := g.PullRequests.Get(ctx, repository.Spec.Owner, repository.Name, sync.Status.PullRequestID)
+	if err != nil {
+		return false, fmt.Errorf("failed to find PR: %w", err)
+	}
+
+	done := pointer.BoolDeref(pr.Merged, false) || pr.ClosedAt != nil
+	return done, nil
 }
 
 func (v *Validator) createCheckRunStatus(ctx context.Context, repository gitv1alpha1.Repository, pullRequestID int, status string) error {
