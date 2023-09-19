@@ -99,7 +99,7 @@ func (d *Deployer) Deploy(ctx context.Context, obj *v1alpha1.ProductDeploymentPi
 					Kind:      owner.Kind,
 				},
 			},
-			KustomizationTemplate: kustomizev1beta2.KustomizationSpec{
+			KustomizationTemplate: &kustomizev1beta2.KustomizationSpec{
 				Prune:           true,
 				TargetNamespace: kubernetesAccess.TargetNamespace,
 			},
