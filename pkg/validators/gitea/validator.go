@@ -65,6 +65,44 @@ func (v *Validator) PassValidation(ctx context.Context, repository gitv1alpha1.R
 	return v.createCheckRunStatus(ctx, repository, sync.Status.PullRequestID, gitea.StatusSuccess)
 }
 
+func (v *Validator) IsMergedOrClosed(ctx context.Context, repository gitv1alpha1.Repository, sync deliveryv1alpha1.Sync) (bool, error) {
+	logger := log.FromContext(ctx)
+
+	if repository.Spec.Provider != provider {
+		logger.Info("gitea validator doesn't validate provider, skipping to next", "provider", repository.Spec.Provider)
+
+		if v.Next == nil {
+			return false, fmt.Errorf("%s not supported, and no next validator configured", repository.Spec.Provider)
+		}
+
+		return v.Next.IsMergedOrClosed(ctx, repository, sync)
+	}
+
+	pullRequestID := sync.Status.PullRequestID
+
+	token, err := v.retrieveAccessToken(ctx, repository)
+	if err != nil {
+		return false, fmt.Errorf("failed to retrieve token: %w", err)
+	}
+
+	domain := defaultDomain
+	if repository.Spec.Domain != "" {
+		domain = repository.Spec.Domain
+	}
+
+	client, err := gitea.NewClient(domain, gitea.SetToken(string(token)))
+	if err != nil {
+		return false, fmt.Errorf("failed to create gitea client: %w", err)
+	}
+
+	pr, _, err := client.GetPullRequest(repository.Spec.Owner, repository.Name, int64(pullRequestID))
+	if err != nil {
+		return false, fmt.Errorf("failed to find PR: %w", err)
+	}
+
+	return pr.HasMerged || pr.Closed != nil, nil
+}
+
 func (v *Validator) createCheckRunStatus(ctx context.Context, repository gitv1alpha1.Repository, pullRequestID int, status gitea.StatusState) error {
 	logger := log.FromContext(ctx)
 

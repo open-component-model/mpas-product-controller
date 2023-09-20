@@ -156,6 +156,25 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
+	if conditions.IsTrue(obj, meta.ReadyCondition) {
+		merged, err := r.Validator.IsMergedOrClosed(ctx, *repository, *sync)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to fetch pull request status: %w", err)
+		}
+
+		if merged {
+			logger.Info("validation pull request is merged/closed, removing git repository")
+			if err := r.deleteGitRepository(ctx, obj.Status.GitRepositoryRef); err != nil {
+				conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.GitRepositoryCleanUpFailedReason, err.Error())
+
+				return ctrl.Result{}, fmt.Errorf("failed to delete GitRepository tracking the values file: %w", err)
+			}
+
+			// Stop reconciling this validation any further.
+			return ctrl.Result{}, nil
+		}
+	}
+
 	if obj.Status.GitRepositoryRef == nil {
 		logger.Info("creating git repository to track value changes")
 		// create gitrepository to track values file and immediately requeue
@@ -193,7 +212,7 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if artifact.Digest == obj.Status.LastValidatedDigest {
 		logger.Info("digest already validated", "digest", artifact.Digest)
 
-		return ctrl.Result{}, nil
+		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 	}
 
 	obj.Status.LastValidatedDigest = artifact.Digest
@@ -232,12 +251,6 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 	}
 
-	if err := r.deleteGitRepository(ctx, obj.Status.GitRepositoryRef); err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.GitRepositoryCleanUpFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to delete GitRepository tracking the values file: %w", err)
-	}
-
 	if err := r.Validator.PassValidation(ctx, *repository, *sync); err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ValidationFailedReason, err.Error())
 
@@ -247,7 +260,8 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
 	obj.Status.LastValidatedDigestOutcome = mpasv1alpha1.SuccessValidationOutcome
 
-	return ctrl.Result{}, nil
+	// Requeue until the related pull request is merged or closed.
+	return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 }
 
 // createValueFileGitRepository creates a GitRepository that tracks changes on a branch.
