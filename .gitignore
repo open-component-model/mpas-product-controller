@@ -25,6 +25,3 @@ Dockerfile.cross
 *.swo
 *~
 tilt-settings.yaml
-
-# helm
-helm/

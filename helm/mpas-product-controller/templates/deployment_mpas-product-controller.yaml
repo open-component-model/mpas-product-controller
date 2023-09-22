@@ -1,0 +1,74 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: mpas-product-controller
+    app.kubernetes.io/component: manager
+    app.kubernetes.io/created-by: mpas-product-controller
+    app.kubernetes.io/instance: mpas-product-controller
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: deployment
+    app.kubernetes.io/part-of: mpas-product-controller
+  name: mpas-product-controller
+  namespace: mpas-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mpas-product-controller
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        app: mpas-product-controller
+    spec:
+      containers:
+      - args:
+        - --zap-log-level=4
+        - --leader-elect
+        - --oci-registry-addr=registry.ocm-system.svc.cluster.local:5000
+        command:
+        - /manager
+        image: ghcr.io/open-component-model/mpas-product-controller:latest
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: manager
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 500m
+            memory: 256Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - mountPath: /etc/ssl/certs/registry-root.pem
+          name: certificates
+          subPath: registry-root.pem
+      securityContext:
+        runAsNonRoot: true
+      serviceAccountName: mpas-product-controller
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: certificates
+        secret:
+          items:
+          - key: ca.crt
+            path: registry-root.pem
+          secretName: ocm-registry-tls-certs
