@@ -351,6 +351,9 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 				Message:    project.Spec.Git.CommitTemplate.Message,
 				BaseBranch: project.Spec.Git.DefaultBranch,
 			},
+			PullRequestTemplate: gitv1alpha1.PullRequestTemplate{
+				Title: fmt.Sprintf("MPAS System Automated Pull Request for Product: %s", prodDesc.Name),
+			},
 			AutomaticPullRequestCreation: true,
 			SubPath:                      "products/.",
 		},
