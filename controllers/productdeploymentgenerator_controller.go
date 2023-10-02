@@ -313,7 +313,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	}
 
 	if project.Spec.Git.CommitTemplate == nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CommitTemplateEmptyReason, err.Error())
+		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CommitTemplateEmptyReason, "commit template in project cannot be empty")
 
 		return ctrl.Result{}, fmt.Errorf("commit template in project cannot be empty")
 	}
