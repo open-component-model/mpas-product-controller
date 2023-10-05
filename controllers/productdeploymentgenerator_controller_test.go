@@ -49,10 +49,25 @@ func TestProductDeploymentGeneratorReconciler(t *testing.T) {
 		fmt.Fprint(w, string(manifests))
 	}))
 
+	testNamespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-namespace",
+			Annotations: map[string]string{
+				projectv1.ProjectKey: "project",
+			},
+		},
+	}
+
+	mpasNamespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "mpas-system",
+		},
+	}
+
 	repo := &v1beta2.GitRepository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "repo",
-			Namespace: "mpas-system",
+			Namespace: testNamespace.Name,
 		},
 		Spec: v1beta2.GitRepositorySpec{
 			URL: "oci://repo",
@@ -68,7 +83,7 @@ func TestProductDeploymentGeneratorReconciler(t *testing.T) {
 	project := &projectv1.Project{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "project",
-			Namespace: "mpas-system",
+			Namespace: mpasNamespace.Name,
 		},
 		Spec: projectv1.ProjectSpec{
 			Git: alpha1.RepositorySpec{
@@ -88,7 +103,7 @@ func TestProductDeploymentGeneratorReconciler(t *testing.T) {
 				Entries: []projectv1.ResourceRef{
 					{
 						// in the format '<namespace>_<name>_<group>_<kind>'.
-						ID:      "mpas-system_repo_v1alpha1_GitRepository",
+						ID:      testNamespace.Name + "_repo_v1alpha1_GitRepository",
 						Version: "v0.0.1",
 					},
 				},
@@ -100,13 +115,13 @@ func TestProductDeploymentGeneratorReconciler(t *testing.T) {
 	serviceAccount := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-service-account",
-			Namespace: "mpas-system",
+			Namespace: testNamespace.Name,
 		},
 	}
 	subscription := &v1alpha13.ComponentSubscription{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-subscription",
-			Namespace: "mpas-system",
+			Namespace: testNamespace.Name,
 		},
 		Spec: v1alpha13.ComponentSubscriptionSpec{
 			Interval: metav1.Duration{Duration: time.Second},
@@ -129,7 +144,7 @@ func TestProductDeploymentGeneratorReconciler(t *testing.T) {
 	obj := &v1alpha1.ProductDeploymentGenerator{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-product-deployment-generator",
-			Namespace: "mpas-system",
+			Namespace: testNamespace.Name,
 		},
 		Spec: v1alpha1.ProductDeploymentGeneratorSpec{
 			Interval: metav1.Duration{Duration: time.Second},
@@ -143,7 +158,7 @@ func TestProductDeploymentGeneratorReconciler(t *testing.T) {
 	cv := &ocmctrv1.ComponentVersion{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-component",
-			Namespace: "default",
+			Namespace: testNamespace.Name,
 		},
 		Spec: ocmctrv1.ComponentVersionSpec{
 			Interval:  metav1.Duration{Duration: 10 * time.Minute},
@@ -197,7 +212,7 @@ func TestProductDeploymentGeneratorReconciler(t *testing.T) {
 	fakeOcmClient.GetResourceDataReturns("manifest", manifest, nil)
 	fakeOcmClient.GetResourceDataReturns("instructions", readme, nil)
 	fakeOcmClient.GetResourceDataReturns("validation", []byte(""), nil)
-	fakeClient := env.FakeKubeClient(WithObjets(repo, project, obj, subscription, serviceAccount))
+	fakeClient := env.FakeKubeClient(WithObjets(mpasNamespace, testNamespace, repo, project, obj, subscription, serviceAccount))
 	fakeWriter := &mockSnapshotWriter{}
 
 	reconciler := &ProductDeploymentGeneratorReconciler{
@@ -218,7 +233,7 @@ func TestProductDeploymentGeneratorReconciler(t *testing.T) {
 
 	// Get the Sync and Get the snapshot data?
 	sync := &gitv1alpha1delivery.Sync{}
-	err = fakeClient.Get(context.Background(), types.NamespacedName{Name: obj.Name + "-sync-" + reconciler.hashComponentVersion("v0.0.1"), Namespace: "mpas-system"}, sync)
+	err = fakeClient.Get(context.Background(), types.NamespacedName{Name: obj.Name + "-sync-" + reconciler.hashComponentVersion("v0.0.1"), Namespace: testNamespace.Name}, sync)
 
 	require.NoError(t, err)
 
@@ -247,10 +262,25 @@ func TestProductDeploymentGeneratorReconcilerWithValueFile(t *testing.T) {
 		fmt.Fprint(w, string(manifests))
 	}))
 
+	testNamespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-namespace",
+			Annotations: map[string]string{
+				projectv1.ProjectKey: "project",
+			},
+		},
+	}
+
+	mpasNamespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "mpas-system",
+		},
+	}
+
 	repo := &v1beta2.GitRepository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "repo",
-			Namespace: "mpas-system",
+			Namespace: testNamespace.Name,
 		},
 		Spec: v1beta2.GitRepositorySpec{
 			URL: "oci://repo",
@@ -280,13 +310,13 @@ func TestProductDeploymentGeneratorReconcilerWithValueFile(t *testing.T) {
 		Status: projectv1.ProjectStatus{
 			RepositoryRef: &meta.NamespacedObjectReference{
 				Name:      "test-repository",
-				Namespace: "mpas-system",
+				Namespace: testNamespace.Name,
 			},
 			Inventory: &projectv1.ResourceInventory{
 				Entries: []projectv1.ResourceRef{
 					{
 						// in the format '<namespace>_<name>_<group>_<kind>'.
-						ID:      "mpas-system_repo_v1alpha1_GitRepository",
+						ID:      testNamespace.Name + "_repo_v1alpha1_GitRepository",
 						Version: "v0.0.1",
 					},
 				},
@@ -298,13 +328,13 @@ func TestProductDeploymentGeneratorReconcilerWithValueFile(t *testing.T) {
 	serviceAccount := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-service-account",
-			Namespace: "mpas-system",
+			Namespace: testNamespace.Name,
 		},
 	}
 	subscription := &v1alpha13.ComponentSubscription{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-subscription",
-			Namespace: "mpas-system",
+			Namespace: testNamespace.Name,
 		},
 		Spec: v1alpha13.ComponentSubscriptionSpec{
 			Interval: metav1.Duration{Duration: time.Second},
@@ -327,7 +357,7 @@ func TestProductDeploymentGeneratorReconcilerWithValueFile(t *testing.T) {
 	obj := &v1alpha1.ProductDeploymentGenerator{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-product-deployment-generator",
-			Namespace: "mpas-system",
+			Namespace: testNamespace.Name,
 		},
 		Spec: v1alpha1.ProductDeploymentGeneratorSpec{
 			Interval: metav1.Duration{Duration: time.Second},
@@ -341,7 +371,7 @@ func TestProductDeploymentGeneratorReconcilerWithValueFile(t *testing.T) {
 	cv := &ocmctrv1.ComponentVersion{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-component",
-			Namespace: "default",
+			Namespace: testNamespace.Name,
 		},
 		Spec: ocmctrv1.ComponentVersionSpec{
 			Interval:  metav1.Duration{Duration: 10 * time.Minute},
@@ -395,7 +425,7 @@ func TestProductDeploymentGeneratorReconcilerWithValueFile(t *testing.T) {
 	fakeOcmClient.GetResourceDataReturns("manifest", manifest, nil)
 	fakeOcmClient.GetResourceDataReturns("instructions", readme, nil)
 	fakeOcmClient.GetResourceDataReturns("validation", []byte(""), nil)
-	fakeClient := env.FakeKubeClient(WithObjets(repo, project, obj, subscription, serviceAccount))
+	fakeClient := env.FakeKubeClient(WithObjets(mpasNamespace, testNamespace, repo, project, obj, subscription, serviceAccount))
 	fakeWriter := &mockSnapshotWriter{}
 
 	reconciler := &ProductDeploymentGeneratorReconciler{
@@ -416,7 +446,7 @@ func TestProductDeploymentGeneratorReconcilerWithValueFile(t *testing.T) {
 
 	// Get the Sync and Get the snapshot data?
 	sync := &gitv1alpha1delivery.Sync{}
-	err = fakeClient.Get(context.Background(), types.NamespacedName{Name: obj.Name + "-sync-" + reconciler.hashComponentVersion("v0.0.1"), Namespace: "mpas-system"}, sync)
+	err = fakeClient.Get(context.Background(), types.NamespacedName{Name: obj.Name + "-sync-" + reconciler.hashComponentVersion("v0.0.1"), Namespace: testNamespace.Name}, sync)
 
 	require.NoError(t, err)
 

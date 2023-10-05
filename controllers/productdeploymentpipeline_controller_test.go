@@ -15,6 +15,7 @@ import (
 	"github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -32,10 +33,24 @@ import (
 )
 
 func TestProductDeploymentPipelineReconciler(t *testing.T) {
+	testNamespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-namespace",
+			Annotations: map[string]string{
+				projectv1.ProjectKey: "project",
+			},
+		},
+	}
+
+	mpasNamespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "mpas-system",
+		},
+	}
 	owner := &mpasv1alpha1.ProductDeployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "pipeline-owner",
-			Namespace: "mpas-system",
+			Namespace: testNamespace.Name,
 		},
 		Spec: mpasv1alpha1.ProductDeploymentSpec{
 			Component: replicationv1.Component{
@@ -53,7 +68,7 @@ func TestProductDeploymentPipelineReconciler(t *testing.T) {
 	cv := &v1alpha1.ComponentVersion{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-pipeline-component-version",
-			Namespace: "mpas-system",
+			Namespace: testNamespace.Name,
 		},
 		Spec: v1alpha1.ComponentVersionSpec{
 			Interval:  metav1.Duration{Duration: time.Second},
@@ -74,7 +89,7 @@ func TestProductDeploymentPipelineReconciler(t *testing.T) {
 	obj := &mpasv1alpha1.ProductDeploymentPipeline{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-pipeline",
-			Namespace: "mpas-system",
+			Namespace: testNamespace.Name,
 		},
 		Spec: mpasv1alpha1.ProductDeploymentPipelineSpec{
 			ComponentVersionRef: "test-pipeline-component-version",
@@ -161,7 +176,7 @@ targetNamespace: mpas-system
 	snapshot := &v1alpha1.Snapshot{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      obj.Name + "-localization-snapshot",
-			Namespace: "mpas-system",
+			Namespace: testNamespace.Name,
 		},
 		Spec:   v1alpha1.SnapshotSpec{},
 		Status: v1alpha1.SnapshotStatus{},
@@ -169,7 +184,7 @@ targetNamespace: mpas-system
 	localization := &v1alpha1.Localization{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      obj.Name + "-localization",
-			Namespace: obj.Namespace,
+			Namespace: testNamespace.Name,
 		},
 		Spec: v1alpha1.MutationSpec{
 			Interval: metav1.Duration{Duration: 10 * time.Minute},
@@ -199,7 +214,7 @@ targetNamespace: mpas-system
 		WithAddToScheme(projectv1.AddToScheme),
 		WithAddToScheme(v1beta2.AddToScheme),
 		WithAddToScheme(kustomizev1beta2.AddToScheme),
-		WithObjets(project, owner, obj, cv, target, snapshot, localization),
+		WithObjets(testNamespace, mpasNamespace, project, owner, obj, cv, target, snapshot, localization),
 	)
 
 	mgr := &ProductDeploymentPipelineReconciler{

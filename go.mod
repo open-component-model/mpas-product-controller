@@ -31,7 +31,7 @@ require (
 	github.com/goccy/go-yaml v1.9.5
 	github.com/google/go-github/v52 v52.0.0
 	github.com/open-component-model/git-controller v0.7.0
-	github.com/open-component-model/mpas-project-controller v0.1.1
+	github.com/open-component-model/mpas-project-controller v0.2.0
 	github.com/open-component-model/ocm v0.4.0
 	github.com/open-component-model/ocm-controller v0.13.0
 	github.com/open-component-model/replication-controller v0.6.1

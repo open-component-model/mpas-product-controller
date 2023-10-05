@@ -15,6 +15,7 @@ import (
 	sourcebeta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -31,6 +32,20 @@ import (
 )
 
 func TestBasicReconcile(t *testing.T) {
+	testNamespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-namespace",
+			Annotations: map[string]string{
+				projectv1.ProjectKey: "project",
+			},
+		},
+	}
+
+	mpasNamespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "mpas-system",
+		},
+	}
 	values, err := os.ReadFile(filepath.Join("testdata", "values.tar.gz"))
 	require.NoError(t, err)
 	testServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -47,7 +62,7 @@ func TestBasicReconcile(t *testing.T) {
 	sync := &gitv1alpha1.Sync{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-sync",
-			Namespace: "mpas-system",
+			Namespace: testNamespace.Name,
 		},
 		Spec: gitv1alpha1.SyncSpec{},
 		Status: gitv1alpha1.SyncStatus{
@@ -73,7 +88,7 @@ func TestBasicReconcile(t *testing.T) {
 				Entries: []projectv1.ResourceRef{
 					{
 						// in the format '<namespace>_<name>_<group>_<kind>'.
-						ID:      "mpas-system_repo_v1alpha1_GitRepository",
+						ID:      testNamespace.Name + "_repo_v1alpha1_GitRepository",
 						Version: "v0.0.1",
 					},
 				},
@@ -85,7 +100,7 @@ func TestBasicReconcile(t *testing.T) {
 	owner := &mpasv1alpha1.ProductDeploymentGenerator{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-product-deployment-generator",
-			Namespace: "mpas-system",
+			Namespace: testNamespace.Name,
 		},
 		Spec:   mpasv1alpha1.ProductDeploymentGeneratorSpec{},
 		Status: mpasv1alpha1.ProductDeploymentGeneratorStatus{},
@@ -93,7 +108,7 @@ func TestBasicReconcile(t *testing.T) {
 	obj := &mpasv1alpha1.Validation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-validation",
-			Namespace: "mpas-system",
+			Namespace: testNamespace.Name,
 		},
 		Spec: mpasv1alpha1.ValidationSpec{
 			ValidationRules: []mpasv1alpha1.ValidationData{
@@ -122,7 +137,7 @@ deny[msg] {
 	require.NoError(t, err)
 
 	fakeClient := env.FakeKubeClient(
-		WithObjets(obj, project, repository, sync),
+		WithObjets(testNamespace, mpasNamespace, obj, project, repository, sync),
 	)
 
 	mgr := ValidationReconciler{
@@ -175,6 +190,20 @@ deny[msg] {
 }
 
 func TestRemovingGitRepositoryWhenPullRequestIsMerged(t *testing.T) {
+	testNamespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-namespace",
+			Annotations: map[string]string{
+				projectv1.ProjectKey: "project",
+			},
+		},
+	}
+
+	mpasNamespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "mpas-system",
+		},
+	}
 	repository := &gitmpasv1alpha1.Repository{
 		TypeMeta:   metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{},
@@ -184,7 +213,7 @@ func TestRemovingGitRepositoryWhenPullRequestIsMerged(t *testing.T) {
 	sync := &gitv1alpha1.Sync{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-sync",
-			Namespace: "mpas-system",
+			Namespace: testNamespace.Name,
 		},
 		Spec: gitv1alpha1.SyncSpec{},
 		Status: gitv1alpha1.SyncStatus{
@@ -196,7 +225,7 @@ func TestRemovingGitRepositoryWhenPullRequestIsMerged(t *testing.T) {
 	gitRepository := &sourcebeta2.GitRepository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-git-repository",
-			Namespace: "mpas-system",
+			Namespace: testNamespace.Name,
 		},
 	}
 	project := &projectv1.Project{
@@ -216,7 +245,7 @@ func TestRemovingGitRepositoryWhenPullRequestIsMerged(t *testing.T) {
 				Entries: []projectv1.ResourceRef{
 					{
 						// in the format '<namespace>_<name>_<group>_<kind>'.
-						ID:      "mpas-system_repo_v1alpha1_GitRepository",
+						ID:      testNamespace.Name + "_repo_v1alpha1_GitRepository",
 						Version: "v0.0.1",
 					},
 				},
@@ -228,13 +257,13 @@ func TestRemovingGitRepositoryWhenPullRequestIsMerged(t *testing.T) {
 	owner := &mpasv1alpha1.ProductDeploymentGenerator{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-product-deployment-generator",
-			Namespace: "mpas-system",
+			Namespace: testNamespace.Name,
 		},
 	}
 	obj := &mpasv1alpha1.Validation{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-validation",
-			Namespace: "mpas-system",
+			Namespace: testNamespace.Name,
 		},
 		Spec: mpasv1alpha1.ValidationSpec{
 			SyncRef: meta.NamespacedObjectReference{
@@ -255,7 +284,7 @@ func TestRemovingGitRepositoryWhenPullRequestIsMerged(t *testing.T) {
 	require.NoError(t, err)
 
 	fakeClient := env.FakeKubeClient(
-		WithObjets(obj, project, repository, sync, gitRepository),
+		WithObjets(testNamespace, mpasNamespace, obj, project, repository, sync, gitRepository),
 	)
 
 	mgr := ValidationReconciler{

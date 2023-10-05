@@ -107,7 +107,7 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 
 	snapshotProvider = localization
 
-	project, err := GetProjectInNamespace(ctx, r.Client, r.MpasSystemNamespace)
+	project, err := GetProjectFromObjectNamespace(ctx, r.Client, owner, r.MpasSystemNamespace)
 	if err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
 

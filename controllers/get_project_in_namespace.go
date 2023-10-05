@@ -4,22 +4,31 @@ import (
 	"context"
 	"fmt"
 
-	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
+	"github.com/open-component-model/mpas-project-controller/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// GetProjectInNamespace returns the Project in the current namespace.
-func GetProjectInNamespace(ctx context.Context, c client.Client, namespace string) (*projectv1.Project, error) {
-	projectList := &projectv1.ProjectList{}
-	if err := c.List(ctx, projectList, client.InNamespace(namespace)); err != nil {
+// GetProjectFromObjectNamespace returns the Project from the annotation of the current namespace that an object
+// is in.
+func GetProjectFromObjectNamespace(ctx context.Context, c client.Client, obj client.Object, defaultNamespace string) (*v1alpha1.Project, error) {
+	// Look up the namespace of the object and check the annotation.
+	ns := &corev1.Namespace{}
+	if err := c.Get(ctx, types.NamespacedName{Name: obj.GetNamespace()}, ns); err != nil {
+		return nil, fmt.Errorf("failed to retrieve namespace for object: %w", err)
+	}
+
+	v, ok := ns.Annotations[v1alpha1.ProjectKey]
+	if !ok {
+		return nil, fmt.Errorf("project key %s not found on namespace", v1alpha1.ProjectKey)
+	}
+
+	// Get the project from the annotation.
+	project := &v1alpha1.Project{}
+	if err := c.Get(ctx, types.NamespacedName{Name: v, Namespace: defaultNamespace}, project); err != nil {
 		return nil, fmt.Errorf("failed to find project in namespace: %w", err)
 	}
-
-	if v := len(projectList.Items); v != 1 {
-		return nil, fmt.Errorf("exactly one Project should have been found in namespace %s; got: %d", namespace, v)
-	}
-
-	project := &projectList.Items[0]
 
 	return project, nil
 }
