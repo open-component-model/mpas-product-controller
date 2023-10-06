@@ -11,43 +11,15 @@ import (
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
-	"github.com/fluxcd/pkg/runtime/object"
 	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/record"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func TestTargetReconciler_Reconcile(t *testing.T) {
-	target := &v1alpha1.Target{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "test-target",
-		},
-		Spec: v1alpha1.TargetSpec{
-			Type: v1alpha1.Kubernetes,
-			Access: &apiextensionsv1.JSON{
-				Raw: []byte(`{"targetNamespace":"test-namespace"}`),
-			},
-			ServiceAccountName: "test-service-account",
-		},
-	}
-
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-secret",
-			Namespace: "test-namespace",
-		},
-		Type: corev1.SecretTypeDockerConfigJson,
-		Data: map[string][]byte{
-			".dockercfg": []byte(`{"auths":{"test-registry":{"username":"test-user","password":"test-password"}}}`),
-		},
-	}
-
 	tests := []struct {
 		name         string
 		secretLabels map[string]string
@@ -58,14 +30,14 @@ func TestTargetReconciler_Reconcile(t *testing.T) {
 		{
 			name: "Target Ready with no secret",
 			wantResult: func(t assert.TestingT, a any, b ...any) bool {
-				target := a.(*v1alpha1.Target)
-				// Check if the object status is valid.
-				return assert.Equal(t,
-					[]metav1.Condition{*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Target is ready")},
-					target.Status.Conditions,
-				)
+				target, ok := a.(*v1alpha1.Target)
+				if !ok {
+					assert.Fail(t, "a is not a *v1alpha1.Target")
+				}
+
+				return equalConditions(target.Status.Conditions,
+					[]metav1.Condition{*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Target is ready")})
 			},
-			wantErr: assert.NoError,
 		},
 		{
 			name: "Target Ready with a secret",
@@ -74,64 +46,65 @@ func TestTargetReconciler_Reconcile(t *testing.T) {
 			},
 			wantResult: func(t assert.TestingT, a any, b ...any) bool {
 				target := a.(*v1alpha1.Target)
-				// Check if the object status is valid.
 
-				return assert.Equal(t,
-					[]metav1.Condition{*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Target is ready")},
-					target.Status.Conditions,
-				)
+				// Check if the object status is valid.
+				return equalConditions(target.Status.Conditions,
+					[]metav1.Condition{*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Target is ready")})
 			},
-			wantErr: assert.NoError,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fakeClient := env.FakeKubeClient(WithObjects(target))
-			r := &TargetReconciler{
-				Client:        fakeClient,
-				Scheme:        env.scheme,
-				EventRecorder: record.NewFakeRecorder(32),
+			ns, err := env.envtest.CreateNamespace(ctx, "mpas-system")
+			require.NoError(t, err)
+
+			target := &v1alpha1.Target{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-target",
+					Namespace: ns.Name,
+				},
+				Spec: v1alpha1.TargetSpec{
+					Type: v1alpha1.Kubernetes,
+					Access: &apiextensionsv1.JSON{
+						Raw: []byte(`{"targetNamespace":"test-namespace"}`),
+					},
+					ServiceAccountName: "test-service-account",
+				},
 			}
 
-			_, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: target.Name}})
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-secret",
+					Namespace: "test-namespace",
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+				Data: map[string][]byte{
+					".dockerconfigjson": []byte(`{"auths":{"test-registry":{"username":"test-user","password":"test-password"}}}`),
+				},
+			}
 
-			waitForReadyCondition(context.Background(), t, fakeClient, target)
+			err = env.envtest.CreateAndWait(ctx, target)
+			require.NoError(t, err)
+
+			waitForReadyCondition(context.Background(), t, env.envtest, target)
 
 			if tt.secretLabels != nil {
 				secret.Labels = tt.secretLabels
-				fakeClient.Create(context.Background(), secret)
-				target.Spec.Selector = &metav1.LabelSelector{
+				err := env.envtest.CreateAndWait(context.Background(), secret)
+				require.NoError(t, err)
+				target.Spec.SecretsSelector = &metav1.LabelSelector{
 					MatchLabels: tt.secretLabels,
 				}
-				_, err = r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Name: target.Name}})
-				waitForReadyCondition(context.Background(), t, fakeClient, target)
+				err = env.envtest.Update(context.Background(), target)
+				require.NoError(t, err)
 			}
 
-			tt.wantErr(t, err, fmt.Sprintf("Reconcile(%v)", tt.name))
+			waitForReadyCondition(context.Background(), t, env.envtest, target)
+
+			t.Log("target", target)
 			tt.wantResult(t, target, fmt.Sprintf("Reconcile(%v)", tt.name))
 		})
 	}
 
-}
-
-// waitForReadyConditionis a generic test helper to wait for an object to be
-// ready.
-func waitForReadyCondition(ctx context.Context, t *testing.T, c client.Client, obj conditions.Setter) {
-	key := client.ObjectKeyFromObject(obj)
-	assert.Eventually(t, func() bool {
-		if err := c.Get(ctx, key, obj); err != nil {
-			return false
-		}
-		if !conditions.IsReady(obj) {
-			return false
-		}
-		readyCondition := conditions.Get(obj, meta.ReadyCondition)
-		statusObservedGen, err := object.GetStatusObservedGeneration(obj)
-		if err != nil {
-			return false
-		}
-		return obj.GetGeneration() == readyCondition.ObservedGeneration &&
-			obj.GetGeneration() == statusObservedGen
-	}, env.timeout, env.pollInterval)
 }

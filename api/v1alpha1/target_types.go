@@ -41,10 +41,10 @@ type TargetSpec struct {
 	ServiceAccountName string `json:"serviceAccountName"`
 
 	// selector is a label query over secrets that should be used for target access.
-	// If found, the first secret will be used as access credentials and attached to the ServiceAccount.
+	// If found, the secrets will added to the target ServiceAccount as image pull secrets.
 	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors
 	// +optional
-	Selector *metav1.LabelSelector `json:"selector,omitempty"`
+	SecretsSelector *metav1.LabelSelector `json:"selector,omitempty"`
 }
 
 // TargetStatus defines the observed state of Target

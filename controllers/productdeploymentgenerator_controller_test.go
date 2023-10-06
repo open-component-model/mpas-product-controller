@@ -212,7 +212,8 @@ func TestProductDeploymentGeneratorReconciler(t *testing.T) {
 	fakeOcmClient.GetResourceDataReturns("manifest", manifest, nil)
 	fakeOcmClient.GetResourceDataReturns("instructions", readme, nil)
 	fakeOcmClient.GetResourceDataReturns("validation", []byte(""), nil)
-	fakeClient := env.FakeKubeClient(WithObjects(mpasNamespace, testNamespace, repo, project, obj, subscription, serviceAccount))
+	fakeClient := env.FakeKubeClient(WithObjects(mpasNamespace, testNamespace, repo, project, obj, subscription, serviceAccount),
+		WithStatusSubresource(repo, project, obj, subscription))
 	fakeWriter := &mockSnapshotWriter{}
 
 	reconciler := &ProductDeploymentGeneratorReconciler{
@@ -425,7 +426,8 @@ func TestProductDeploymentGeneratorReconcilerWithValueFile(t *testing.T) {
 	fakeOcmClient.GetResourceDataReturns("manifest", manifest, nil)
 	fakeOcmClient.GetResourceDataReturns("instructions", readme, nil)
 	fakeOcmClient.GetResourceDataReturns("validation", []byte(""), nil)
-	fakeClient := env.FakeKubeClient(WithObjects(mpasNamespace, testNamespace, repo, project, obj, subscription, serviceAccount))
+	fakeClient := env.FakeKubeClient(WithObjects(mpasNamespace, testNamespace, repo, project, obj, subscription, serviceAccount),
+		WithStatusSubresource(repo, project, obj, subscription))
 	fakeWriter := &mockSnapshotWriter{}
 
 	reconciler := &ProductDeploymentGeneratorReconciler{

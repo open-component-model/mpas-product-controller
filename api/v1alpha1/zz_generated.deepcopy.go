@@ -665,8 +665,8 @@ func (in *TargetSpec) DeepCopyInto(out *TargetSpec) {
 		(*in).DeepCopyInto(*out)
 	}
 	out.Interval = in.Interval
-	if in.Selector != nil {
-		in, out := &in.Selector, &out.Selector
+	if in.SecretsSelector != nil {
+		in, out := &in.SecretsSelector, &out.SecretsSelector
 		*out = new(v1.LabelSelector)
 		(*in).DeepCopyInto(*out)
 	}

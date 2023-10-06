@@ -28,18 +28,37 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
 	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
 )
+
+var targetOwnedConditions = []string{
+	meta.ReadyCondition,
+	meta.ReconcilingCondition,
+	meta.StalledCondition,
+}
+
+// getPatchOptions composes patch options based on the given parameters.
+// It is used as the options used when patching an object.
+func getPatchOptions(ownedConditions []string, controllerName string) []patch.Option {
+	return []patch.Option{
+		patch.WithOwnedConditions{Conditions: ownedConditions},
+		patch.WithFieldOwner(controllerName),
+	}
+}
 
 // TargetReconciler reconciles a Target object
 type TargetReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 	kuberecorder.EventRecorder
+	ControllerName string
+	patchOptions   []patch.Option
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *TargetReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+	r.patchOptions = getPatchOptions(targetOwnedConditions, r.ControllerName)
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Target{}, builder.WithPredicates(
 			predicate.Or(predicate.GenerationChangedPredicate{}, predicates.ReconcileRequestedPredicate{}),
@@ -74,6 +93,7 @@ func (r *TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 		}
 
 		patchOpts := []patch.Option{}
+		patchOpts = append(patchOpts, r.patchOptions...)
 
 		// Set status observed generation option if the object is stalled, or
 		// if the object is ready.
@@ -144,12 +164,15 @@ func (r *TargetReconciler) reconcile(ctx context.Context, sp *patch.SerialPatche
 	}()
 
 	// delete reconciling and stalled conditions if they exis
-	conditions.MarkFalse(obj, meta.ReconcilingCondition, meta.ProgressingReason, "Reconciliation in progress")
-	conditions.Delete(obj, meta.StalledCondition)
+	rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason, "reconciliation in progress")
 
 	if obj.Generation != obj.Status.ObservedGeneration {
-		conditions.MarkUnknown(obj, meta.ReadyCondition, meta.ProgressingReason, "reconciliation in progress")
-		conditions.MarkTrue(obj, meta.ReconcilingCondition, meta.ProgressingReason, "reconciliation in progress")
+		rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason,
+			"processing object: new generation %d -> %d", obj.Status.ObservedGeneration, obj.Generation)
+		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
+			result, retErr = ctrl.Result{}, err
+			return
+		}
 	}
 
 	var kubernetesAccess v1alpha1.KubernetesAccess
@@ -160,6 +183,8 @@ func (r *TargetReconciler) reconcile(ctx context.Context, sp *patch.SerialPatche
 		return
 	}
 
+	conditions.Delete(obj, meta.StalledCondition)
+
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: kubernetesAccess.TargetNamespace,
@@ -167,12 +192,6 @@ func (r *TargetReconciler) reconcile(ctx context.Context, sp *patch.SerialPatche
 	}
 
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, ns, func() error {
-		// set owner reference to make sure that the namespace exists as long as the target exists
-		// In order for the namespace to still exist after the target is deleted, any other owner has to set the
-		// OwnerReference to the namespace
-		if err := controllerutil.SetOwnerReference(obj, ns, r.Scheme); err != nil {
-			return err
-		}
 		return nil
 	})
 
@@ -183,8 +202,8 @@ func (r *TargetReconciler) reconcile(ctx context.Context, sp *patch.SerialPatche
 
 	// get secrets with the target label if it exists
 	secrets := &corev1.SecretList{}
-	if obj.Spec.Selector != nil {
-		if err = r.List(ctx, secrets, client.MatchingLabels(obj.Spec.Selector.MatchLabels)); err != nil {
+	if obj.Spec.SecretsSelector != nil {
+		if err = r.List(ctx, secrets, client.MatchingLabels(obj.Spec.SecretsSelector.MatchLabels), client.InNamespace(ns.Name)); err != nil {
 			conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.SecretRetrievalFailedReason, err.Error())
 			return ctrl.Result{}, fmt.Errorf("error retrieving secrets: %w", err)
 		}

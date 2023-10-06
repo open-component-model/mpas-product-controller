@@ -45,9 +45,8 @@ spec:
                 type: string
               selector:
                 description: 'selector is a label query over secrets that should be
-                  used for target access. If found, the first secret will be used
-                  as access credentials and attached to the ServiceAccount. More info:
-                  https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors'
+                  used for target access. If found, the secrets will added to the
+                  target ServiceAccount as image pull secrets. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors'
                 properties:
                   matchExpressions:
                     description: matchExpressions is a list of label selector requirements.

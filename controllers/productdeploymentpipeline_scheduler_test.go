@@ -89,6 +89,7 @@ func TestSnapshotIsAvailable(t *testing.T) {
 
 	fakeClient := env.FakeKubeClient(
 		WithObjects(target, obj, snapshot),
+		WithStatusSubresource(target, obj, snapshot),
 	)
 
 	mgr := &ProductDeploymentPipelineScheduler{
