@@ -214,7 +214,7 @@ targetNamespace: mpas-system
 		WithAddToScheme(projectv1.AddToScheme),
 		WithAddToScheme(v1beta2.AddToScheme),
 		WithAddToScheme(kustomizev1beta2.AddToScheme),
-		WithObjets(testNamespace, mpasNamespace, project, owner, obj, cv, target, snapshot, localization),
+		WithObjects(testNamespace, mpasNamespace, project, owner, obj, cv, target, snapshot, localization),
 	)
 
 	mgr := &ProductDeploymentPipelineReconciler{

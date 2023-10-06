@@ -6,6 +6,7 @@ package controllers
 
 import (
 	"testing"
+	"time"
 
 	sourcebeta2 "github.com/fluxcd/source-controller/api/v1beta2"
 	gitv1alpha1delivery "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
@@ -22,8 +23,10 @@ import (
 )
 
 type testEnv struct {
-	scheme *runtime.Scheme
-	obj    []client.Object
+	scheme       *runtime.Scheme
+	obj          []client.Object
+	timeout      time.Duration
+	pollInterval time.Duration
 }
 
 // FakeKubeClientOption defines options to construct a fake kube client. There are some defaults involved.
@@ -41,7 +44,7 @@ func WithAddToScheme(addToScheme func(s *runtime.Scheme) error) FakeKubeClientOp
 }
 
 // WithObjects provides an option to set objects for the fake client.
-func WithObjets(obj ...client.Object) FakeKubeClientOption {
+func WithObjects(obj ...client.Object) FakeKubeClientOption {
 	return func(env *testEnv) {
 		env.obj = obj
 	}
@@ -72,7 +75,9 @@ func TestMain(m *testing.M) {
 	_ = sourcebeta2.AddToScheme(scheme)
 
 	env = &testEnv{
-		scheme: scheme,
+		scheme:       scheme,
+		timeout:      time.Second * 10,
+		pollInterval: time.Millisecond * 250,
 	}
 	m.Run()
 }

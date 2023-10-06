@@ -137,7 +137,7 @@ deny[msg] {
 	require.NoError(t, err)
 
 	fakeClient := env.FakeKubeClient(
-		WithObjets(testNamespace, mpasNamespace, obj, project, repository, sync),
+		WithObjects(testNamespace, mpasNamespace, obj, project, repository, sync),
 	)
 
 	mgr := ValidationReconciler{
@@ -284,7 +284,7 @@ func TestRemovingGitRepositoryWhenPullRequestIsMerged(t *testing.T) {
 	require.NoError(t, err)
 
 	fakeClient := env.FakeKubeClient(
-		WithObjets(testNamespace, mpasNamespace, obj, project, repository, sync, gitRepository),
+		WithObjects(testNamespace, mpasNamespace, obj, project, repository, sync, gitRepository),
 	)
 
 	mgr := ValidationReconciler{

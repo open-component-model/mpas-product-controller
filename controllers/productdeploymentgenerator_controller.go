@@ -49,7 +49,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
 	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
@@ -72,6 +71,10 @@ const (
 	ignoreMarker                  = "+mpas-ignore"
 )
 
+const (
+	sourceKey = ".metadata.source"
+)
+
 var (
 	unschedulableError = errors.New("pipeline cannot be scheduled as it doesn't define any target scopes")
 )
@@ -88,10 +91,6 @@ type ProductDeploymentGeneratorReconciler struct {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ProductDeploymentGeneratorReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	const (
-		sourceKey = ".metadata.source"
-	)
-
 	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &v1alpha1.ProductDeploymentGenerator{}, sourceKey, func(rawObj client.Object) []string {
 		generator := rawObj.(*v1alpha1.ProductDeploymentGenerator)
 		var ns = generator.Spec.SubscriptionRef.Namespace
@@ -106,8 +105,8 @@ func (r *ProductDeploymentGeneratorReconciler) SetupWithManager(mgr ctrl.Manager
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.ProductDeploymentGenerator{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Watches(
-			&source.Kind{Type: &replicationv1.ComponentSubscription{}},
-			handler.EnqueueRequestsFromMapFunc(r.findGenerators(sourceKey)),
+			&replicationv1.ComponentSubscription{},
+			handler.EnqueueRequestsFromMapFunc(r.findGenerators),
 			builder.WithPredicates(ComponentSubscriptionVersionChangedPredicate{})).
 		Complete(r)
 }
@@ -669,30 +668,28 @@ func (t *headerTransformer) Transform(doc *ast.Document, reader text.Reader, pct
 // findGenerators looks for all the generator objects which have indexes on the ComponentVersion that is being
 // fetched here. Specifically, the sourceKey's fields should match the field returned by ObjectKeyFromObject which
 // will be the Name and Namespace of the ComponentSubscription. For which there are indexes set up in the Manager section.
-func (r *ProductDeploymentGeneratorReconciler) findGenerators(sourceKey string) handler.MapFunc {
-	return func(object client.Object) []reconcile.Request {
-		selectorTerm := client.ObjectKeyFromObject(object).String()
+func (r *ProductDeploymentGeneratorReconciler) findGenerators(ctx context.Context, o client.Object) []reconcile.Request {
+	selectorTerm := client.ObjectKeyFromObject(o).String()
 
-		generators := &v1alpha1.ProductDeploymentGeneratorList{}
-		if err := r.List(context.TODO(), generators, &client.ListOptions{
-			FieldSelector: fields.OneTermEqualSelector(sourceKey, selectorTerm),
-		}); err != nil {
-			return []reconcile.Request{}
-		}
-
-		requests := make([]reconcile.Request, 0, len(generators.Items))
-
-		for _, generator := range generators.Items {
-			requests = append(requests, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      generator.GetName(),
-					Namespace: generator.GetNamespace(),
-				},
-			})
-		}
-
-		return requests
+	generators := &v1alpha1.ProductDeploymentGeneratorList{}
+	if err := r.List(context.TODO(), generators, &client.ListOptions{
+		FieldSelector: fields.OneTermEqualSelector(sourceKey, selectorTerm),
+	}); err != nil {
+		return []reconcile.Request{}
 	}
+
+	requests := make([]reconcile.Request, 0, len(generators.Items))
+
+	for _, generator := range generators.Items {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      generator.GetName(),
+				Namespace: generator.GetNamespace(),
+			},
+		})
+	}
+
+	return requests
 }
 
 // hashComponentVersion provides a small chunk of a hexadecimal format for a version.

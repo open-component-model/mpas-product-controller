@@ -88,7 +88,7 @@ func TestSnapshotIsAvailable(t *testing.T) {
 	}
 
 	fakeClient := env.FakeKubeClient(
-		WithObjets(target, obj, snapshot),
+		WithObjects(target, obj, snapshot),
 	)
 
 	mgr := &ProductDeploymentPipelineScheduler{
@@ -160,7 +160,7 @@ func TestSnapshotIsUnavailable(t *testing.T) {
 	}
 
 	fakeClient := env.FakeKubeClient(
-		WithObjets(obj),
+		WithObjects(obj),
 	)
 
 	mgr := &ProductDeploymentPipelineScheduler{

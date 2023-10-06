@@ -6,16 +6,16 @@ replace github.com/opencontainers/go-digest => github.com/opencontainers/go-dige
 
 // Flux dependent re-writes. These are needed to be compatible with the flux version at all times.
 replace (
-	k8s.io/api => k8s.io/api v0.26.3
-	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.26.3
-	k8s.io/apimachinery => k8s.io/apimachinery v0.26.3
-	k8s.io/cli-runtime => k8s.io/cli-runtime v0.26.3
-	k8s.io/client-go => k8s.io/client-go v0.26.3
-	k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20230109183929-3758b55a6596
-	k8s.io/kubectl => k8s.io/kubectl v0.26.3
-	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.14.6
-	sigs.k8s.io/kustomize/api => sigs.k8s.io/kustomize/api v0.12.1
-	sigs.k8s.io/kustomize/kyaml => sigs.k8s.io/kustomize/kyaml v0.13.9
+	k8s.io/api => k8s.io/api v0.27.4
+	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.27.3
+	k8s.io/apimachinery => k8s.io/apimachinery v0.27.4
+	k8s.io/cli-runtime => k8s.io/cli-runtime v0.27.3
+	k8s.io/client-go => k8s.io/client-go v0.27.4
+	k8s.io/kube-openapi => k8s.io/kube-openapi v0.0.0-20230515203736-54b630e78af5
+	k8s.io/kubectl => k8s.io/kubectl v0.27.3
+	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.15.1
+	sigs.k8s.io/kustomize/api => sigs.k8s.io/kustomize/api v0.13.2
+	sigs.k8s.io/kustomize/kyaml => sigs.k8s.io/kustomize/kyaml v0.14.1
 )
 
 require (
@@ -25,7 +25,7 @@ require (
 	github.com/distribution/distribution/v3 v3.0.0-20230327091844-0c958010ace2
 	github.com/fluxcd/kustomize-controller/api v1.0.0-rc.3
 	github.com/fluxcd/pkg/apis/meta v1.1.2
-	github.com/fluxcd/pkg/runtime v0.35.0
+	github.com/fluxcd/pkg/runtime v0.42.0
 	github.com/fluxcd/pkg/untar v0.2.0
 	github.com/fluxcd/source-controller/api v1.1.0
 	github.com/goccy/go-yaml v1.9.5
@@ -49,7 +49,7 @@ require (
 	k8s.io/client-go v0.28.1
 	k8s.io/klog/v2 v2.100.1
 	k8s.io/utils v0.0.0-20230505201702-9f6742963106
-	sigs.k8s.io/controller-runtime v0.16.1
+	sigs.k8s.io/controller-runtime v0.16.2
 )
 
 require (
