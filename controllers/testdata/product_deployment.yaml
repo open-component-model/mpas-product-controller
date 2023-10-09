@@ -3,7 +3,7 @@ kind: ProductDeployment
 metadata:
   creationTimestamp: null
   name: test-product-deployment-generator
-  namespace: mpas-system
+  namespace: test-namespace
 spec:
   component:
     name: github.com/open-component-model/mpas

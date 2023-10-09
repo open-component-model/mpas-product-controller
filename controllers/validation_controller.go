@@ -129,7 +129,7 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 	}
 
-	project, err := GetProjectInNamespace(ctx, r.Client, r.MpasSystemNamespace)
+	project, err := GetProjectFromObjectNamespace(ctx, r.Client, sync, r.MpasSystemNamespace)
 	if err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
 
