@@ -217,12 +217,10 @@ func (r *TargetReconciler) reconcile(ctx context.Context, sp *patch.SerialPatche
 	}
 
 	// if the secrets exist, add it to the service account
-	if len(secrets.Items) > 0 {
-		for _, secret := range secrets.Items {
-			sa.ImagePullSecrets = append(sa.ImagePullSecrets, corev1.LocalObjectReference{
-				Name: secret.Name,
-			})
-		}
+	for _, secret := range secrets.Items {
+		sa.ImagePullSecrets = append(sa.ImagePullSecrets, corev1.LocalObjectReference{
+			Name: secret.Name,
+		})
 	}
 
 	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, sa, func() error {
