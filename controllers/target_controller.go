@@ -70,11 +70,13 @@ func (r *TargetReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manage
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=Targets/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=Targets/finalizers,verbs=update
 //+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+//+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
+//+kubebuilder:rbac:groups="",resources=serviceaccounts;namespaces,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // Named return values: It's used for improving readability when dealing with the defer patch statement.
-func (r *TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
+func (r *TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, retErr error) {
 	logger := log.FromContext(ctx)
 
 	logger.V(4).Info("starting reconciliation", "target", req.NamespacedName)
@@ -88,10 +90,6 @@ func (r *TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 
 	// Always attempt to patch the object and status after each reconciliation.
 	defer func() {
-		if obj == nil {
-			return
-		}
-
 		patchOpts := []patch.Option{}
 		patchOpts = append(patchOpts, r.patchOptions...)
 
@@ -111,8 +109,7 @@ func (r *TargetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res
 
 	}()
 
-	result, retErr = r.reconcile(ctx, serialPatcher, obj)
-	return
+	return r.reconcile(ctx, serialPatcher, obj)
 }
 
 func (r *TargetReconciler) reconcile(ctx context.Context, sp *patch.SerialPatcher, obj *v1alpha1.Target) (result ctrl.Result, retErr error) {
@@ -170,8 +167,7 @@ func (r *TargetReconciler) reconcile(ctx context.Context, sp *patch.SerialPatche
 		rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason,
 			"processing object: new generation %d -> %d", obj.Status.ObservedGeneration, obj.Generation)
 		if err := sp.Patch(ctx, obj, r.patchOptions...); err != nil {
-			result, retErr = ctrl.Result{}, err
-			return
+			return ctrl.Result{}, err
 		}
 	}
 
@@ -179,8 +175,7 @@ func (r *TargetReconciler) reconcile(ctx context.Context, sp *patch.SerialPatche
 	if err := yaml.Unmarshal(obj.Spec.Access.Raw, &kubernetesAccess); err != nil {
 		conditions.MarkStalled(obj, v1alpha1.AccessInvalidReason, err.Error())
 		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.AccessInvalidReason, err.Error())
-		result, retErr = ctrl.Result{}, err
-		return
+		return ctrl.Result{}, err
 	}
 
 	conditions.Delete(obj, meta.StalledCondition)
@@ -237,8 +232,7 @@ func (r *TargetReconciler) reconcile(ctx context.Context, sp *patch.SerialPatche
 	// block at the very end.
 	conditions.Delete(obj, meta.ReadyCondition)
 
-	result, retErr = ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
-	return
+	return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 }
 
 func (r *TargetReconciler) eventLogf(ctx context.Context, obj runtime.Object, eventType string, reason string, messageFmt string, args ...interface{}) {
