@@ -6,7 +6,9 @@ package controllers
 
 import (
 	"context"
+	"flag"
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -98,40 +100,50 @@ func TestMain(m *testing.M) {
 	_ = sourcebeta2.AddToScheme(scheme)
 	_ = v1alpha1.AddToScheme(scheme)
 
-	envtest := envtest.New(
-		envtest.WithCRDPath(filepath.Join("..", "config", "crd", "bases")),
-		envtest.WithMaxConcurrentReconciles(4),
-		envtest.WithScheme(scheme),
-	)
-
 	env = &testEnv{
 		scheme:       scheme,
 		timeout:      time.Second * 20,
 		pollInterval: time.Millisecond * 250,
-		envtest:      envtest,
 	}
 
-	if err := (&TargetReconciler{
-		Client:        envtest,
-		EventRecorder: record.NewFakeRecorder(32),
-	}).SetupWithManager(ctx, envtest); err != nil {
-		panic(fmt.Sprintf("Failed to start the target reconciler: %v", err))
-	}
+	// call flag.Parse() here because we depend on testing.Short() in our tests
+	flag.Parse()
 
-	go func() {
-		fmt.Println("Starting the test environment")
-		if err := env.envtest.Start(ctx); err != nil {
-			panic(fmt.Sprintf("Failed to start the test environment manager: %v", err))
+	if !testing.Short() {
+		envtest := envtest.New(
+			envtest.WithCRDPath(filepath.Join("..", "config", "crd", "bases")),
+			envtest.WithMaxConcurrentReconciles(4),
+			envtest.WithScheme(scheme),
+		)
+
+		env.envtest = envtest
+
+		if err := (&TargetReconciler{
+			Client:        envtest,
+			EventRecorder: record.NewFakeRecorder(32),
+		}).SetupWithManager(ctx, envtest); err != nil {
+			panic(fmt.Sprintf("Failed to start the target reconciler: %v", err))
 		}
-	}()
-	<-env.envtest.Manager.Elected()
 
-	m.Run()
-
-	fmt.Println("Stopping the test environment")
-	if err := env.envtest.Stop(); err != nil {
-		panic(fmt.Sprintf("Failed to stop the test environment: %v", err))
+		go func() {
+			fmt.Println("Starting the test environment")
+			if err := env.envtest.Start(ctx); err != nil {
+				panic(fmt.Sprintf("Failed to start the test environment manager: %v", err))
+			}
+		}()
+		<-env.envtest.Manager.Elected()
 	}
+
+	code := m.Run()
+
+	if !testing.Short() {
+		fmt.Println("Stopping the test environment")
+		if err := env.envtest.Stop(); err != nil {
+			panic(fmt.Sprintf("Failed to stop the test environment: %v", err))
+		}
+	}
+
+	os.Exit(code)
 }
 
 // waitForReadyConditionis a generic test helper to wait for an object to be
