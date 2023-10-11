@@ -69,7 +69,7 @@ func (r *TargetReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manage
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=Targets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=Targets/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=Targets/finalizers,verbs=update
-// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+//+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
