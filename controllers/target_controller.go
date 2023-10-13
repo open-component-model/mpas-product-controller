@@ -47,6 +47,13 @@ func getPatchOptions(ownedConditions []string, controllerName string) []patch.Op
 	}
 }
 
+//+kubebuilder:rbac:groups=mpas.ocm.software,resources=targets,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=mpas.ocm.software,resources=targets/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=mpas.ocm.software,resources=targets/finalizers,verbs=update
+//+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+//+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
+//+kubebuilder:rbac:groups="",resources=serviceaccounts;namespaces,verbs=get;list;watch;create;update;patch;delete
+
 // TargetReconciler reconciles a Target object
 type TargetReconciler struct {
 	client.Client
@@ -65,13 +72,6 @@ func (r *TargetReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manage
 		)).
 		Complete(r)
 }
-
-//+kubebuilder:rbac:groups=mpas.ocm.software,resources=Targets,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=mpas.ocm.software,resources=Targets/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=mpas.ocm.software,resources=Targets/finalizers,verbs=update
-//+kubebuilder:rbac:groups="",resources=events,verbs=create;patch
-//+kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
-//+kubebuilder:rbac:groups="",resources=serviceaccounts;namespaces,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -202,6 +202,11 @@ func (r *TargetReconciler) reconcile(ctx context.Context, sp *patch.SerialPatche
 			conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.SecretRetrievalFailedReason, err.Error())
 			return ctrl.Result{}, fmt.Errorf("error retrieving secrets: %w", err)
 		}
+
+		if len(secrets.Items) == 0 {
+			conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.SecretRetrievalFailedReason, "no secrets found")
+			return ctrl.Result{}, fmt.Errorf("no secrets found")
+		}
 	}
 
 	sa := &corev1.ServiceAccount{
@@ -212,13 +217,17 @@ func (r *TargetReconciler) reconcile(ctx context.Context, sp *patch.SerialPatche
 	}
 
 	// if the secrets exist, add it to the service account
+	var imagePullSecrets []corev1.LocalObjectReference
 	for _, secret := range secrets.Items {
-		sa.ImagePullSecrets = append(sa.ImagePullSecrets, corev1.LocalObjectReference{
+		imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{
 			Name: secret.Name,
 		})
 	}
 
 	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, sa, func() error {
+		if !equalImagePullSecretSlices(sa.ImagePullSecrets, imagePullSecrets) {
+			sa.ImagePullSecrets = imagePullSecrets
+		}
 		return nil
 	})
 
@@ -244,4 +253,16 @@ func (r *TargetReconciler) eventLogf(ctx context.Context, obj runtime.Object, ev
 		ctrl.LoggerFrom(ctx).Info(msg)
 	}
 	r.Eventf(obj, eventType, reason, msg)
+}
+
+func equalImagePullSecretSlices(a, b []corev1.LocalObjectReference) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i, v := range a {
+		if v.Name != b[i].Name {
+			return false
+		}
+	}
+	return true
 }

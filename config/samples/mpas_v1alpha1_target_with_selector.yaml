@@ -13,4 +13,7 @@ spec:
   access:
     targetNamespace: target-sample
   serviceAccountName: target-sample
+  selector:
+    matchLabels:
+      app: mpas-product-controller
   interval: 10s

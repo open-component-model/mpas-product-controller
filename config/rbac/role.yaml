@@ -138,32 +138,6 @@ rules:
 - apiGroups:
   - mpas.ocm.software
   resources:
-  - Targets
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - mpas.ocm.software
-  resources:
-  - Targets/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - mpas.ocm.software
-  resources:
-  - Targets/status
-  verbs:
-  - get
-  - patch
-  - update
-- apiGroups:
-  - mpas.ocm.software
-  resources:
   - productdeploymentgenerators
   verbs:
   - create
@@ -283,6 +257,20 @@ rules:
   - patch
   - update
   - watch
+- apiGroups:
+  - mpas.ocm.software
+  resources:
+  - targets/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - mpas.ocm.software
+  resources:
+  - targets/status
+  verbs:
+  - get
+  - patch
+  - update
 - apiGroups:
   - mpas.ocm.software
   resources:

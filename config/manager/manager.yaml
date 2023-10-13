@@ -46,6 +46,7 @@ spec:
         - --leader-elect
         - --oci-registry-addr=registry.ocm-system.svc.cluster.local:5000
         image: open-component-model/mpas-product-controller:latest
+        imagePullPolicy: IfNotPresent
         name: manager
         securityContext:
           allowPrivilegeEscalation: false
