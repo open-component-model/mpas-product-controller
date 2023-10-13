@@ -24,6 +24,7 @@ import (
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"k8s.io/client-go/tools/record"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -34,15 +35,20 @@ import (
 
 	mpasprojv1alpha1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 
+	"github.com/fluxcd/pkg/runtime/events"
 	mpasv1alpha1 "github.com/open-component-model/mpas-product-controller/api/v1alpha1"
 	"github.com/open-component-model/mpas-product-controller/controllers"
 	//+kubebuilder:scaffold:imports
 )
 
-var (
-	scheme                     = runtime.NewScheme()
-	setupLog                   = ctrl.Log.WithName("setup")
+const (
+	controllerName             = "mpas-product-controller"
 	defaultMpasSystemNamespace = "mpas-system"
+)
+
+var (
+	scheme   = runtime.NewScheme()
+	setupLog = ctrl.Log.WithName("setup")
 )
 
 func init() {
@@ -58,15 +64,19 @@ func init() {
 }
 
 func main() {
-	var metricsAddr string
-	var enableLeaderElection bool
-	var probeAddr string
-	var ociRegistryAddr string
-	var mpasSystemNamespace string
-	var ociRegistryCertSecretName string
+	var (
+		metricsAddr               string
+		eventsAddr                string
+		enableLeaderElection      bool
+		probeAddr                 string
+		ociRegistryAddr           string
+		mpasSystemNamespace       string
+		ociRegistryCertSecretName string
+	)
 
 	flag.StringVar(&ociRegistryCertSecretName, "certificate-secret-name", "ocm-registry-tls-certs", "")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
+	flag.StringVar(&eventsAddr, "events-bind-address", "", "The address the event endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
@@ -94,6 +104,9 @@ func main() {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
+
+	eventRecorder := mustSetupEventRecorder(mgr, eventsAddr, controllerName)
+	ctx := ctrl.SetupSignalHandler()
 
 	cache := oci.NewClient(ociRegistryAddr,
 		oci.WithClient(mgr.GetClient()),
@@ -125,6 +138,16 @@ func main() {
 		MpasSystemNamespace: mpasSystemNamespace,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ProductDeploymentPipeline")
+		os.Exit(1)
+	}
+
+	if err = (&controllers.TargetReconciler{
+		Client:         mgr.GetClient(),
+		Scheme:         mgr.GetScheme(),
+		ControllerName: controllerName,
+		EventRecorder:  eventRecorder,
+	}).SetupWithManager(ctx, mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Target")
 		os.Exit(1)
 	}
 
@@ -162,8 +185,17 @@ func main() {
 	}
 
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func mustSetupEventRecorder(mgr ctrl.Manager, eventsAddr, controllerName string) record.EventRecorder {
+	eventRecorder, err := events.NewRecorder(mgr, ctrl.Log, eventsAddr, controllerName)
+	if err != nil {
+		setupLog.Error(err, "unable to create event recorder")
+		os.Exit(1)
+	}
+	return eventRecorder
 }

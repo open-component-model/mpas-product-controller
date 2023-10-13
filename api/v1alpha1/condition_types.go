@@ -61,6 +61,18 @@ const (
 
 	// GitRepositoryCleanUpFailedReason is used when we couldn't delete the GitRepository.
 	GitRepositoryCleanUpFailedReason = "GitRepositoryCleanUpFailed"
+
+	// NamespaceCreateOrUpdateFailedReason indicates that the project namespace could not be reconciled.
+	NamespaceCreateOrUpdateFailedReason string = "NamespaceCreateOrUpdateFailed"
+
+	// SecretRetrievalFailedReason indicates that the project namespace could not be retrieved from the namespace.
+	SecretRetrievalFailedReason = "SecretRetrievalFailed"
+
+	// ServiceAccountCreateOrUpdateFailedReason indicates that the project service account could not be reconciled.
+	ServiceAccountCreateOrUpdateFailedReason string = "ServiceAccountCreateOrUpdateFailed"
+
+	// AccessInvalidReason indicates that the access credentials or target are invalid.
+	AccessInvalidReason = "AccessInvalid"
 )
 
 const (

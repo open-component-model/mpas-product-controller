@@ -332,7 +332,7 @@ func TestTargetSelection(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Helper()
 
-			fakeClient := env.FakeKubeClient(WithObjets(tc.targets...))
+			fakeClient := env.FakeKubeClient(WithObjects(tc.targets...), WithStatusSubresource(tc.targets...))
 
 			r := &ProductDeploymentPipelineScheduler{
 				Client:              fakeClient,

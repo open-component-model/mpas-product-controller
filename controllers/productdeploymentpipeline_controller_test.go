@@ -12,7 +12,6 @@ import (
 	kustomizev1beta2 "github.com/fluxcd/kustomize-controller/api/v1beta2"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
-	"github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -210,12 +209,9 @@ targetNamespace: mpas-system
 	}
 
 	fakeClient := env.FakeKubeClient(
-		WithAddToScheme(v1alpha1.AddToScheme),
-		WithAddToScheme(projectv1.AddToScheme),
-		WithAddToScheme(v1beta2.AddToScheme),
 		WithAddToScheme(kustomizev1beta2.AddToScheme),
-		WithObjets(testNamespace, mpasNamespace, project, owner, obj, cv, target, snapshot, localization),
-	)
+		WithObjects(testNamespace, mpasNamespace, project, owner, obj, cv, target, snapshot, localization),
+		WithStatusSubresource(project, owner, cv, target, snapshot, obj, localization))
 
 	mgr := &ProductDeploymentPipelineReconciler{
 		Client:              fakeClient,

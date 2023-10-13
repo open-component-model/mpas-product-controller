@@ -71,7 +71,7 @@ func TestProductDeploymentReconciler(t *testing.T) {
 		},
 	}
 
-	fakeKube := env.FakeKubeClient(WithObjets(deployment), WithAddToScheme(v1alpha1.AddToScheme), WithAddToScheme(ocmv1alpha1.AddToScheme))
+	fakeKube := env.FakeKubeClient(WithObjects(deployment), WithStatusSubresource(deployment))
 
 	reconciler := ProductDeploymentReconciler{
 		Client: fakeKube,
@@ -116,7 +116,7 @@ func TestComponentVersionIsUpdated(t *testing.T) {
 		},
 	}
 
-	fakeKube := env.FakeKubeClient(WithObjets(deployment), WithAddToScheme(v1alpha1.AddToScheme), WithAddToScheme(ocmv1alpha1.AddToScheme))
+	fakeKube := env.FakeKubeClient(WithObjects(deployment), WithStatusSubresource(deployment.DeepCopy()))
 
 	reconciler := ProductDeploymentReconciler{
 		Client: fakeKube,
