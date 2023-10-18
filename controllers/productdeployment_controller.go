@@ -163,10 +163,9 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 			},
 			Spec: v1alpha1.ProductDeploymentPipelineSpec{
 				Resource:            pipeline.Resource,
+				Schema:              pipeline.Schema,
 				Localization:        pipeline.Localization,
-				Configuration:       pipeline.Configuration,
 				TargetRole:          pipeline.TargetRole,
-				Validation:          pipeline.Validation,
 				ComponentVersionRef: r.generateComponentVersionName(obj),
 			},
 		}

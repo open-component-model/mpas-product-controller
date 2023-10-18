@@ -24,7 +24,7 @@ import (
 	"github.com/fluxcd/source-controller/api/v1beta2"
 	goyaml "github.com/goccy/go-yaml"
 	goyamlast "github.com/goccy/go-yaml/ast"
-	goyamlparser "github.com/goccy/go-yaml/parser"
+	"github.com/open-component-model/mpas-product-controller/internal/cue"
 	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	"github.com/open-component-model/ocm-controller/pkg/status"
 	markdown "github.com/teekennedy/goldmark-markdown"
@@ -33,7 +33,6 @@ import (
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
-	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -55,7 +54,6 @@ import (
 
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
 	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
-	ocmconfig "github.com/open-component-model/ocm-controller/pkg/configdata"
 	"github.com/open-component-model/ocm-controller/pkg/snapshot"
 	"github.com/open-component-model/ocm/pkg/contexts/ocm"
 	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
@@ -290,9 +288,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 	productFolder := filepath.Join(dir, obj.Name)
 
-	validationRules := make([]v1alpha1.ValidationData, 0)
-
-	productDeployment, err := r.createProductDeployment(ctx, obj, *prodDesc, component, productFolder, cv, &validationRules, project)
+	productDeployment, err := r.createProductDeployment(ctx, obj, *prodDesc, component, productFolder, cv, project)
 	if err != nil {
 		if errors.Is(err, unschedulableError) {
 			status.MarkNotReady(r.EventRecorder, obj, v1alpha1.ProductPipelineSchedulingFailedReason, err.Error())
@@ -375,43 +371,6 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{}, fmt.Errorf("failed to create sync request: %w", err)
 	}
 
-	// Create the Validation Object.
-	validation := &v1alpha1.Validation{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      obj.Name + "-validation-" + hashedVersion,
-			Namespace: obj.Namespace,
-			Annotations: map[string]string{
-				componentVersionAnnotationKey: component.Version,
-				componentNameAnnotationKey:    component.Name,
-			},
-		},
-		Spec: v1alpha1.ValidationSpec{
-			ValidationRules:    validationRules,
-			ServiceAccountName: obj.Spec.ServiceAccountName,
-			Interval:           metav1.Duration{Duration: 30 * time.Second},
-			SyncRef: meta.NamespacedObjectReference{
-				Name:      sync.Name,
-				Namespace: sync.Namespace,
-			},
-		},
-	}
-
-	if _, err := ctrl.CreateOrUpdate(ctx, r.Client, validation, func() error {
-		if validation.ObjectMeta.CreationTimestamp.IsZero() {
-			if err := controllerutil.SetOwnerReference(obj, validation, r.Scheme); err != nil {
-				return fmt.Errorf("failed to set owner to validation object: %w", err)
-			}
-		}
-
-		return nil
-	}); err != nil {
-		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.CreateValidationFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to create validation request: %w", err)
-	}
-
-	rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason, "components applied and generated")
-
 	obj.Status.LastReconciledVersion = component.Version
 	status.MarkReady(r.EventRecorder, obj, "Applied version: %s", component.Version)
 
@@ -425,7 +384,6 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	component replicationv1.Component,
 	dir string,
 	cv ocm.ComponentVersionAccess,
-	validationRules *[]v1alpha1.ValidationData,
 	project *projectv1.Project,
 ) (*v1alpha1.ProductDeployment, error) {
 	logger := log.FromContext(ctx)
@@ -446,11 +404,11 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 		ServiceAccountName: obj.Spec.ServiceAccountName,
 	}
 
-	values := make(map[string]map[string]any)
 	var readme []byte
+	schemaFiles := make([]*cue.File, len(prodDesc.Spec.Pipelines))
 
 	for _, p := range prodDesc.Spec.Pipelines {
-		pipe, instructions, err := r.createProductPipeline(ctx, prodDesc, p, cv, values)
+		pipe, file, err := r.createProductPipeline(ctx, prodDesc, p, cv)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create product pipeline: %w", err)
 		}
@@ -459,66 +417,42 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 
 		readme = append(readme, []byte(fmt.Sprintf("\n# Configuration instructions for %s\n\n", p.Name))...)
 
-		parsed, err := r.increaseHeaders(instructions)
+		parsed, err := r.increaseHeaders([]byte(file.Comments()))
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse instructions: %w", err)
 		}
 
 		readme = append(readme, parsed...)
 
-		// fetch the validation rules
-		data, err := r.OCMClient.GetResourceData(ctx, cv, p.Validation)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch validation data: %w", err)
-		}
-
-		*validationRules = append(*validationRules, v1alpha1.ValidationData{
-			Name: p.Name,
-			Data: data,
-		})
+		schemaFiles = append(schemaFiles, file)
 	}
 
-	// this is EXPLICITLY using normal yaml.
-	// goyaml, for some reason, parses ints as floats.
-	defaultConfig, err := yaml.Marshal(values)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal default values: %w", err)
-	}
+	schema := schemaFiles[0].Unify(schemaFiles[1:])
 
-	existingValuesFile, err := r.fetchExistingValues(ctx, obj.Name, project)
+	existingConfigFile, err := r.fetchExistingValues(ctx, obj.Name, project)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch ignored values: %w", err)
 	}
 
-	valuesYaml := defaultConfig
-	if existingValuesFile != nil {
-		parsedValues, err := goyamlparser.ParseBytes(defaultConfig, goyamlparser.ParseComments)
+	var configBytes []byte
+	if existingConfigFile != nil {
+		config, err := existingConfigFile.Merge(schema)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse existing values file: %w", err)
+			return nil, fmt.Errorf("failed to merge existing config with schema: %w", err)
 		}
 
-		v := &Visitor{
-			replace: parsedValues,
+		err = config.Sanitize()
+		if err != nil {
+			return nil, fmt.Errorf("failed to sanitize config: %w", err)
 		}
 
-		for _, doc := range existingValuesFile.Docs {
-			goyamlast.Walk(v, doc)
+		configBytes, err = config.Format()
+		if err != nil {
+			return nil, fmt.Errorf("failed to format config: %w", err)
 		}
-
-		if v.err != nil {
-			return nil, fmt.Errorf("failed to update values file: %w", v.err)
-		}
-
-		// A silly little fix for when the generated content doesn't have a linebreak.
-		content := []byte(v.replace.String())
-		if !bytes.HasSuffix(content, []byte("\n")) {
-			content = append(content, '\n')
-		}
-
-		valuesYaml = content
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, "values.yaml"), valuesYaml, 0o777); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "config.cue"), configBytes, 0o777); err != nil {
 		return nil, fmt.Errorf("failed to write configuration values file: %w", err)
 	}
 
@@ -540,8 +474,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(
 	description v1alpha1.ProductDescription,
 	p v1alpha1.ProductDescriptionPipeline,
 	cv ocm.ComponentVersionAccess,
-	values map[string]map[string]any,
-) (v1alpha1.Pipeline, []byte, error) {
+) (v1alpha1.Pipeline, *cue.File, error) {
 	var targetRole *v1alpha1.TargetRole
 
 	if p.TargetRoleName == "" {
@@ -560,37 +493,39 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(
 		return v1alpha1.Pipeline{}, nil, fmt.Errorf("failed to find a target role with name %s: %w", p.TargetRoleName, unschedulableError)
 	}
 
-	// fetch values and create values.yaml file in dir with pipeline.Name-values.yaml
-	if p.Configuration.Rules.Name != "" {
-		content, err := r.OCMClient.GetResourceData(ctx, cv, p.Configuration.Rules)
+	var schemaFile *cue.File
+	if p.Schema.Name != "" {
+		content, err := r.OCMClient.GetResourceData(ctx, cv, p.Schema)
 		if err != nil {
-			return v1alpha1.Pipeline{}, nil, fmt.Errorf("failed to get resource data for %s: %w", p.Configuration.Rules.Name, err)
+			return v1alpha1.Pipeline{}, nil, fmt.Errorf("failed to get schema data for %s: %w", p.Schema.Name, err)
 		}
 
-		configData := &ocmconfig.ConfigData{}
-		if err := kyaml.Unmarshal(content, configData); err != nil {
-			return v1alpha1.Pipeline{}, nil, fmt.Errorf("failed to get unmarshal config data: %w", err)
+		// fetch the cue schema
+		file, err := cue.New(p.Name, string(content))
+		if err != nil {
+			return v1alpha1.Pipeline{}, nil, fmt.Errorf("failed to create cue schema for %s: %w", p.Schema.Name, err)
 		}
 
-		values[p.Name] = configData.Configuration.Defaults
+		schemaFile = file
 	}
 
-	// add readme
-	instructions, err := r.OCMClient.GetResourceData(ctx, cv, p.Configuration.Readme)
-	if err != nil {
-		return v1alpha1.Pipeline{}, nil, fmt.Errorf("failed to get readme data for %s: %w", p.Configuration.Readme.Name, err)
+	var jsonData []byte
+	if schemaFile == nil {
+		data, err := schemaFile.Json()
+		if err != nil {
+			return v1alpha1.Pipeline{}, nil, fmt.Errorf("failed to get json data: %w", err)
+		}
+
+		jsonData = data
 	}
 
 	return v1alpha1.Pipeline{
 		Name:         p.Name,
 		Localization: p.Localization,
-		Configuration: v1alpha1.Configuration{
-			Rules: p.Configuration.Rules,
-		},
-		Resource:   p.Source,
-		TargetRole: *targetRole,
-		Validation: p.Validation,
-	}, instructions, nil
+		Resource:     p.Source,
+		TargetRole:   *targetRole,
+		Schema:       jsonData,
+	}, schemaFile, nil
 }
 
 func (r *ProductDeploymentGeneratorReconciler) createSnapshot(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator, productDeployment *v1alpha1.ProductDeployment, component replicationv1.Component, dir string) (string, error) {
@@ -755,7 +690,7 @@ func (v *Visitor) Visit(node goyamlast.Node) goyamlast.Visitor {
 }
 
 // fetchExistingValues gathers existing values.yaml values. If it doesn't exist it returns an empty file and no error.
-func (r *ProductDeploymentGeneratorReconciler) fetchExistingValues(ctx context.Context, productName string, project *projectv1.Project) (*goyamlast.File, error) {
+func (r *ProductDeploymentGeneratorReconciler) fetchExistingValues(ctx context.Context, productName string, project *projectv1.Project) (*cue.File, error) {
 	repoName, repoNamespace, err := FetchGitRepositoryFromProjectInventory(project)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch GitRepository from project: %w", err)
@@ -770,7 +705,7 @@ func (r *ProductDeploymentGeneratorReconciler) fetchExistingValues(ctx context.C
 		return nil, fmt.Errorf("git repository artifact is empty: %w", err)
 	}
 
-	content, err := FetchValuesFileContent(ctx, productName, repo.Status.Artifact)
+	path, err := fetchFile(ctx, repo.Status.Artifact, productName)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -779,10 +714,14 @@ func (r *ProductDeploymentGeneratorReconciler) fetchExistingValues(ctx context.C
 		return nil, fmt.Errorf("failed to fetch existing values file: %w", err)
 	}
 
-	parsedConfig, err := goyamlparser.ParseBytes(content, goyamlparser.ParseComments)
+	configFile, err := cue.New(productName, path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse existing values file: %w", err)
+		return nil, fmt.Errorf("failed to create cue file: %w", err)
 	}
 
-	return parsedConfig, nil
+	if err := configFile.Sanitize(); err != nil {
+		return nil, fmt.Errorf("failed to sanitize existing values file: %w", err)
+	}
+
+	return configFile, nil
 }
