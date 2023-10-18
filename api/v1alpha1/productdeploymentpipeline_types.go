@@ -19,9 +19,7 @@ type ProductDeploymentPipelineSpec struct {
 	// +required
 	Localization ResourceReference `json:"localization"`
 	// +required
-	Configuration Configuration `json:"configuration"`
-	// +required
-	Validation ResourceReference `json:"validation"`
+	Schema []byte `json:"schema"`
 	// +required
 	TargetRole TargetRole `json:"targetRole"`
 

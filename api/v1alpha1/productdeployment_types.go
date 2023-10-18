@@ -69,12 +69,11 @@ type TargetRole struct {
 
 // Pipeline defines a set of pipeline objects.
 type Pipeline struct {
-	Name          string            `json:"name"`
-	Resource      ResourceReference `json:"resource"`
-	Localization  ResourceReference `json:"localization"`
-	Configuration Configuration     `json:"configuration"`
-	Validation    ResourceReference `json:"validation"`
-	TargetRole    TargetRole        `json:"targetRole"`
+	Name         string            `json:"name"`
+	Resource     ResourceReference `json:"resource"`
+	Localization ResourceReference `json:"localization"`
+	Schema       []byte            `json:"schema"`
+	TargetRole   TargetRole        `json:"targetRole"`
 }
 
 // GetConditions returns the conditions of the ComponentVersion.
