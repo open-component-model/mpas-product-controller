@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
@@ -22,8 +21,6 @@ import (
 	"github.com/fluxcd/pkg/runtime/patch"
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
 	"github.com/fluxcd/source-controller/api/v1beta2"
-	goyaml "github.com/goccy/go-yaml"
-	goyamlast "github.com/goccy/go-yaml/ast"
 	"github.com/open-component-model/mpas-product-controller/internal/cue"
 	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	"github.com/open-component-model/ocm-controller/pkg/status"
@@ -405,7 +402,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	}
 
 	var readme []byte
-	schemaFiles := make([]*cue.File, len(prodDesc.Spec.Pipelines))
+	schemaFiles := make([]*cue.File, 0, len(prodDesc.Spec.Pipelines))
 
 	for _, p := range prodDesc.Spec.Pipelines {
 		pipe, file, err := r.createProductPipeline(ctx, prodDesc, p, cv)
@@ -423,13 +420,24 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 		}
 
 		readme = append(readme, parsed...)
-
 		schemaFiles = append(schemaFiles, file)
 	}
 
-	schema, err := schemaFiles[0].Unify(schemaFiles[1:])
-	if err != nil {
-		return nil, fmt.Errorf("failed to unify schemas: %w", err)
+	if len(schemaFiles) == 0 {
+		return nil, fmt.Errorf("failed to create product pipeline, a schema file is required")
+	}
+
+	var (
+		schema *cue.File
+		err    error
+	)
+	if len(schemaFiles) > 1 {
+		schema, err = schemaFiles[0].Unify(schemaFiles[1:])
+		if err != nil {
+			return nil, fmt.Errorf("failed to unify schemas: %w", err)
+		}
+	} else {
+		schema = schemaFiles[0]
 	}
 
 	existingConfigFile, err := r.fetchExistingValues(ctx, obj.Name, project)
@@ -450,7 +458,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 		return nil, fmt.Errorf("failed to sanitize config: %w", err)
 	}
 
-	err = config.Vet()
+	err = config.Validate(schema)
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate configuration values file: %w", err)
 	}
@@ -460,11 +468,11 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 		return nil, fmt.Errorf("failed to format config: %w", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, "config.cue"), configBytes, 0o777); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "config.cue"), configBytes, 0644); err != nil {
 		return nil, fmt.Errorf("failed to write configuration values file: %w", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, "README.md"), readme, 0o777); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), readme, 0644); err != nil {
 		return nil, fmt.Errorf("failed to write readme file: %w", err)
 	}
 
@@ -473,27 +481,9 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert config to yaml: %w", err)
 	}
-
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      obj.Name + "-values",
-			Namespace: obj.Namespace,
-		},
-	}
-
-	if _, err = ctrl.CreateOrUpdate(ctx, r.Client, configMap, func() error {
-		if configMap.Data == nil || len(configMap.Data) == 0 {
-			configMap.Data = map[string]string{
-				"values.yaml": string(configYaml),
-			}
-		}
-
-		if v, ok := configMap.Data["values.yaml"]; !ok || v != string(configYaml) {
-			configMap.Data["values.yaml"] = string(configYaml)
-		}
-		return nil
-	}); err != nil {
-		return nil, fmt.Errorf("failed to create configmap: %w", err)
+	err = r.generateConfigMap(ctx, obj.Name, obj.Namespace, string(configYaml))
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate configmap: %w", err)
 	}
 
 	productDeployment.Spec = spec
@@ -501,6 +491,32 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	logger.Info("successfully generated product deployment", "productDeployment", klog.KObj(productDeployment))
 
 	return productDeployment, nil
+}
+
+func (r *ProductDeploymentGeneratorReconciler) generateConfigMap(ctx context.Context, name, namespace, config string) error {
+
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name + "-values",
+			Namespace: namespace,
+		},
+	}
+
+	if _, err := ctrl.CreateOrUpdate(ctx, r.Client, configMap, func() error {
+		if configMap.Data == nil || len(configMap.Data) == 0 {
+			configMap.Data = map[string]string{
+				"values.yaml": config,
+			}
+		}
+
+		if v, ok := configMap.Data["values.yaml"]; !ok || v != config {
+			configMap.Data["values.yaml"] = config
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("failed to create configmap: %w", err)
+	}
+	return nil
 }
 
 // createProductPipeline takes a pipeline description and builds up all the Kubernetes objects that are needed
@@ -537,7 +553,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(
 		}
 
 		// fetch the cue schema
-		file, err := cue.New(p.Name, string(content))
+		file, err := cue.New(p.Name, "", string(content))
 		if err != nil {
 			return v1alpha1.Pipeline{}, nil, fmt.Errorf("failed to create cue schema for %s: %w", p.Schema.Name, err)
 		}
@@ -669,54 +685,6 @@ func (r *ProductDeploymentGeneratorReconciler) hashComponentVersion(version stri
 	return hex.EncodeToString(h.Sum(nil))[:8]
 }
 
-type Visitor struct {
-	replace *goyamlast.File
-	err     error
-}
-
-// Visit parses a node in the yaml structure. If it finds a node that has a comment and contains the marker,
-// it will fetch the yaml path pointing to that value in the replacement values.yaml file and update it.
-func (v *Visitor) Visit(node goyamlast.Node) goyamlast.Visitor {
-	// quit early if there was an error
-	if v.err != nil {
-		return v
-	}
-
-	comment := node.GetComment()
-	if comment == nil {
-		return v
-	}
-
-	if !strings.Contains(comment.String(), ignoreMarker) {
-		return v
-	}
-
-	path, err := goyaml.PathString(node.GetPath())
-	if err != nil {
-		v.err = fmt.Errorf("failed to parse path string: %w", err)
-
-		return v
-	}
-
-	replaceNode, err := path.FilterFile(v.replace)
-	if err != nil {
-		v.err = fmt.Errorf("failed to filter incoming values with path %s: %w", node.GetPath(), err)
-
-		return v
-	}
-
-	if err := replaceNode.SetComment(comment); err != nil {
-		v.err = fmt.Errorf("failed to set comment on target node: %w", err)
-
-		return v
-	}
-
-	tk := replaceNode.GetToken()
-	tk.Value = node.GetToken().Value
-
-	return v
-}
-
 // fetchExistingValues gathers existing values.yaml values. If it doesn't exist it returns an empty file and no error.
 func (r *ProductDeploymentGeneratorReconciler) fetchExistingValues(ctx context.Context, productName string, project *projectv1.Project) (*cue.File, error) {
 	repoName, repoNamespace, err := FetchGitRepositoryFromProjectInventory(project)
@@ -733,7 +701,7 @@ func (r *ProductDeploymentGeneratorReconciler) fetchExistingValues(ctx context.C
 		return nil, fmt.Errorf("git repository artifact is empty: %w", err)
 	}
 
-	path, err := fetchFile(ctx, repo.Status.Artifact, productName)
+	path, dir, err := fetchFile(ctx, repo.Status.Artifact, productName)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -742,7 +710,13 @@ func (r *ProductDeploymentGeneratorReconciler) fetchExistingValues(ctx context.C
 		return nil, fmt.Errorf("failed to fetch existing values file: %w", err)
 	}
 
-	configFile, err := cue.New(productName, path)
+	defer func() {
+		if oerr := os.RemoveAll(dir); oerr != nil {
+			err = errors.Join(err, oerr)
+		}
+	}()
+
+	configFile, err := cue.New(productName, path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cue file: %w", err)
 	}

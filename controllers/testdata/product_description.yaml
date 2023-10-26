@@ -23,13 +23,8 @@ spec:
           version: 1.0.0
           referencePath:
             - name: backend
-        readme:
-          name: instructions
-          version: 1.0.0
-          referencePath:
-            - name: backend
-      validation:
-        name: validation
+      schema:
+        name: schema
         version: 1.0.0
         referencePath:
           - name: backend

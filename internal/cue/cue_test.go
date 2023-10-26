@@ -5,7 +5,6 @@
 package cue
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,12 +31,7 @@ max_replicas: replicas * 5 @private(true)
 `
 
 func generateConfigFile(t *testing.T, src string) *File {
-	tmpdir := t.TempDir()
-	tmpfile := tmpdir + "/config.cue"
-	err := os.WriteFile(tmpfile, []byte(src), 0644)
-	require.NoError(t, err)
-
-	f, err := New("config", tmpfile)
+	f, err := New("config", "", src)
 	require.NoError(t, err)
 	return f
 }
@@ -106,6 +100,7 @@ labels: {
 			name:   "invalid config empty config",
 			config: "",
 			wantedErr: func(err error) error {
+				require.Error(t, err)
 				// we can parse an empty cue file just fine
 				// but validation will fails because we require concrete values
 				assert.Contains(t, err.Error(), "redis_url")
@@ -122,6 +117,7 @@ labels: {
 }
 `,
 			wantedErr: func(err error) error {
+				require.Error(t, err)
 				assert.Contains(t, err.Error(), "redis_url")
 				return nil
 			},
@@ -192,4 +188,86 @@ deployment:
 	require.NoError(t, err)
 
 	assert.Equal(t, resultYaml, string(data))
+}
+
+func TestCue_Validate(t *testing.T) {
+	schema := generateConfigFile(t, defaultSchema)
+	testsCases := []struct {
+		name      string
+		config    string
+		wantedErr func(err error) error
+	}{
+		{
+			name: "valid config using default values",
+			config: `
+redis_url: "https://localhost:6379"
+`,
+		},
+		{
+			name: "valid config",
+			config: `
+replicas: 3
+redis_url: "https://localhost:6379"
+labels: {
+	"app": "redis"
+	"env": "dev"
+}
+`,
+		},
+		{
+			name: "invalid config empty config",
+			config: `
+`,
+			wantedErr: func(err error) error {
+				require.Error(t, err)
+				// we can parse an empty cue file just fine
+				// but validation will fails because we require concrete values
+				assert.Contains(t, err.Error(), "redis_url")
+				return nil
+			},
+		},
+		{
+			name: "invalid config with wrong type",
+			config: `
+replicas: "3"
+redis_url: "https://localhost:6379"
+labels: {
+	"app": "redis"
+	"env": "dev"
+}
+`,
+			wantedErr: func(err error) error {
+				require.Error(t, err)
+				// replicas should be an int
+				assert.Contains(t, err.Error(), "replicas")
+				return nil
+			},
+		},
+		{
+			name: "valid using same schema constraints",
+			config: `
+replicas: *2 | int
+// this is a required field with of type string with a constraint
+redis_url: "https://localhost:6379"
+    
+// this is an optional field
+labels?: {[string]:string}
+`,
+		},
+	}
+
+	for _, tc := range testsCases {
+		t.Run(tc.name, func(t *testing.T) {
+			config := generateConfigFile(t, tc.config)
+			merged, err := config.Merge(schema)
+			require.NoError(t, err)
+			err = merged.Validate(schema)
+			if tc.wantedErr != nil {
+				err = tc.wantedErr(err)
+				require.NoError(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }

@@ -43,6 +43,61 @@ spec:
                   description: ProductDescriptionPipeline defines the details for
                     a pipeline item.
                   properties:
+                    configuration:
+                      description: DescriptionConfiguration contains details one parsing
+                        configuration items in a project description.
+                      properties:
+                        rules:
+                          properties:
+                            extraIdentity:
+                              additionalProperties:
+                                type: string
+                              description: Identity describes the identity of an object.
+                                Only ascii characters are allowed
+                              type: object
+                            labels:
+                              description: Labels describe a list of labels
+                              items:
+                                description: Label is a label that can be set on objects.
+                                properties:
+                                  name:
+                                    description: Name is the unique name of the label.
+                                    type: string
+                                  signing:
+                                    description: Signing describes whether the label
+                                      should be included into the signature
+                                    type: boolean
+                                  value:
+                                    description: Value is the json/yaml data of the
+                                      label
+                                    x-kubernetes-preserve-unknown-fields: true
+                                  version:
+                                    description: Version is the optional specification
+                                      version of the attribute value
+                                    type: string
+                                required:
+                                - name
+                                - value
+                                type: object
+                              type: array
+                            name:
+                              type: string
+                            referencePath:
+                              items:
+                                additionalProperties:
+                                  type: string
+                                description: Identity describes the identity of an
+                                  object. Only ascii characters are allowed
+                                type: object
+                              type: array
+                            version:
+                              type: string
+                          required:
+                          - name
+                          type: object
+                      required:
+                      - rules
+                      type: object
                     localization:
                       properties:
                         extraIdentity:
@@ -97,12 +152,11 @@ spec:
                         extraIdentity:
                           additionalProperties:
                             type: string
-                          description: ExtraIdentity is the identity of an object.
-                            An additional label with key "name" ist not allowed
+                          description: Identity describes the identity of an object.
+                            Only ascii characters are allowed
                           type: object
                         labels:
-                          description: Labels defines an optional set of additional
-                            labels describing the object.
+                          description: Labels describe a list of labels
                           items:
                             description: Label is a label that can be set on objects.
                             properties:
@@ -126,7 +180,6 @@ spec:
                             type: object
                           type: array
                         name:
-                          description: Name is the context unique name of the object.
                           type: string
                         referencePath:
                           items:
@@ -137,11 +190,9 @@ spec:
                             type: object
                           type: array
                         version:
-                          description: Version is the semver version of the object.
                           type: string
                       required:
                       - name
-                      - version
                       type: object
                     source:
                       properties:
@@ -194,7 +245,6 @@ spec:
                       type: string
                   required:
                   - name
-                  - schema
                   - source
                   type: object
                 type: array
