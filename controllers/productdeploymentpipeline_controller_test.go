@@ -25,6 +25,7 @@ import (
 	alpha1 "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
 	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	"github.com/open-component-model/ocm-controller/api/v1alpha1"
+	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 
@@ -93,7 +94,7 @@ func TestProductDeploymentPipelineReconciler(t *testing.T) {
 		Spec: mpasv1alpha1.ProductDeploymentPipelineSpec{
 			ComponentVersionRef: "test-pipeline-component-version",
 			Resource: mpasv1alpha1.ResourceReference{
-				ElementMeta: v1alpha1.ElementMeta{
+				ElementMeta: ocmv1alpha1.ElementMeta{
 					Name:    "backend",
 					Version: "0.0.1",
 				},
@@ -104,7 +105,7 @@ func TestProductDeploymentPipelineReconciler(t *testing.T) {
 				},
 			},
 			Localization: mpasv1alpha1.ResourceReference{
-				ElementMeta: v1alpha1.ElementMeta{
+				ElementMeta: ocmv1alpha1.ElementMeta{
 					Name:    "manifests",
 					Version: "0.0.1",
 				},

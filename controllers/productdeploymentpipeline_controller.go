@@ -29,7 +29,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
 	mpasv1alpha1 "github.com/open-component-model/mpas-product-controller/api/v1alpha1"
+	mpasocm "github.com/open-component-model/mpas-product-controller/pkg/ocm"
 	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 )
@@ -38,6 +40,7 @@ import (
 type ProductDeploymentPipelineReconciler struct {
 	client.Client
 	Scheme              *runtime.Scheme
+	OCMClient           mpasocm.Contract
 	MpasSystemNamespace string
 	EventRecorder       record.EventRecorder
 }
@@ -189,11 +192,7 @@ func (r *ProductDeploymentPipelineReconciler) createOrUpdateConfiguration(
 		}
 	}
 
-	// get the git repository of the created repository
-	repoName, repoNamespace, err := FetchGitRepositoryFromProjectInventory(project)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch GitRepository from project: %w", err)
-	}
+	pdLabel := obj.GetLabels()[v1alpha1.ProductDeploymentOwnerLabelKey]
 
 	configuration := &ocmv1alpha1.Configuration{
 		ObjectMeta: metav1.ObjectMeta{
@@ -212,13 +211,11 @@ func (r *ProductDeploymentPipelineReconciler) createOrUpdateConfiguration(
 				ResourceRef: &reference,
 			},
 			ValuesFrom: &ocmv1alpha1.ValuesSource{
-				FluxSource: &ocmv1alpha1.FluxValuesSource{
-					SourceRef: meta.NamespacedObjectKindReference{
-						Kind:      "GitRepository",
-						Name:      repoName,
-						Namespace: repoNamespace,
+				ConfigMapSource: &ocmv1alpha1.ConfigMapSource{
+					SourceRef: meta.LocalObjectReference{
+						Name: pdLabel + "-values",
 					},
-					Path:    "./products/" + owner.Name + "/values.yaml",
+					Key:     "values.yaml",
 					SubPath: obj.Name,
 				},
 			},
