@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 )
 
 // GetProjectFromObjectNamespace returns the Project from the annotation of the current namespace that an object
@@ -19,7 +20,7 @@ func GetProjectFromObjectNamespace(ctx context.Context, c client.Client, obj cli
 		return nil, fmt.Errorf("failed to retrieve namespace for object: %w", err)
 	}
 
-	v, ok := ns.Annotations[v1alpha1.ProjectKey]
+	v, ok := ns.Labels[v1alpha1.ProjectKey]
 	if !ok {
 		return nil, fmt.Errorf("project key %s not found on namespace", v1alpha1.ProjectKey)
 	}

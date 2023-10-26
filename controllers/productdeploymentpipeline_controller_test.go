@@ -35,7 +35,7 @@ func TestProductDeploymentPipelineReconciler(t *testing.T) {
 	testNamespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-namespace",
-			Annotations: map[string]string{
+			Labels: map[string]string{
 				projectv1.ProjectKey: "project",
 			},
 		},
