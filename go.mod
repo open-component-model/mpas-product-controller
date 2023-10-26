@@ -27,7 +27,7 @@ replace (
 
 require (
 	code.gitea.io/sdk/gitea v0.15.1
-	cuelang.org/go v0.5.0
+	cuelang.org/go v0.6.0
 	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/containers/image/v5 v5.23.0
 	github.com/distribution/distribution/v3 v3.0.0-20230327091844-0c958010ace2
@@ -49,6 +49,7 @@ require (
 	github.com/stretchr/testify v1.8.4
 	github.com/teekennedy/goldmark-markdown v0.2.0
 	github.com/yuin/goldmark v1.4.13
+	golang.org/x/exp v0.0.0-20230321023759-10a507213a29
 	golang.org/x/oauth2 v0.14.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -124,7 +125,7 @@ require (
 	github.com/chrismellard/docker-credential-acr-env v0.0.0-20220119192733-fe33c00cee21 // indirect
 	github.com/clbanning/mxj/v2 v2.5.6 // indirect
 	github.com/cloudflare/circl v1.3.3 // indirect
-	github.com/cockroachdb/apd/v2 v2.0.2 // indirect
+	github.com/cockroachdb/apd/v3 v3.2.0 // indirect
 	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be // indirect
 	github.com/containerd/containerd v1.7.4 // indirect
 	github.com/containerd/stargz-snapshotter/estargz v0.14.3 // indirect
@@ -315,7 +316,6 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.25.0 // indirect
 	golang.org/x/crypto v0.15.0 // indirect
-	golang.org/x/exp v0.0.0-20230321023759-10a507213a29 // indirect
 	golang.org/x/mod v0.11.0 // indirect
 	golang.org/x/net v0.18.0 // indirect
 	golang.org/x/sync v0.3.0 // indirect

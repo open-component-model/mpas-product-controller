@@ -54,14 +54,6 @@ func TestProductDeploymentReconciler(t *testing.T) {
 							Version: "1.0.0",
 						},
 					},
-					Configuration: v1alpha1.Configuration{
-						Rules: v1alpha1.ResourceReference{
-							ElementMeta: ocmv1alpha1.ElementMeta{
-								Name:    "configuration",
-								Version: "1.0.0",
-							},
-						},
-					},
 					TargetRole: v1alpha1.TargetRole{
 						Type:     "kubernetes",
 						Selector: metav1.LabelSelector{},
@@ -98,7 +90,6 @@ func TestProductDeploymentReconciler(t *testing.T) {
 
 	assert.Equal(t, "manifests", pipeline.Spec.Resource.Name)
 	assert.Equal(t, "localization", pipeline.Spec.Localization.Name)
-	assert.Equal(t, "configuration", pipeline.Spec.Configuration.Rules.Name)
 }
 
 func TestComponentVersionIsUpdated(t *testing.T) {

@@ -1,6 +1,11 @@
+// SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Open Component Model contributors.
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package cue
 
 import (
+	"bytes"
 	"fmt"
 
 	"cuelang.org/go/cue"
@@ -9,6 +14,8 @@ import (
 	"cuelang.org/go/cue/cuecontext"
 	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/parser"
+	"cuelang.org/go/pkg/encoding/json"
+	"cuelang.org/go/pkg/encoding/yaml"
 	"golang.org/x/exp/slices"
 )
 
@@ -26,10 +33,10 @@ var defaultOpts = []cue.Option{
 // It provides methods for working with cue files.
 type File struct {
 	Name          string
+	schemaVersion string
 	ctx           *cue.Context
 	file          *ast.File
 	v             cue.Value
-	schemaVersion string
 }
 
 // New creates a new File from a cue file.
@@ -46,6 +53,7 @@ func New(name, filePath string) (*File, error) {
 	}, nil
 }
 
+// SchemaVersion returns the schema version of the cue file.
 func (f *File) SchemaVersion() (string, error) {
 	if f.schemaVersion != "" {
 		return f.schemaVersion, nil
@@ -59,6 +67,8 @@ func (f *File) SchemaVersion() (string, error) {
 	return f.schemaVersion, nil
 }
 
+// Comments returns the comments of the top Node of the cue file.
+// It returns an empty string if there are no comments.
 func (f *File) Comments() string {
 	var comments string
 	for _, s := range f.file.Comments() {
@@ -80,22 +90,25 @@ func (f *File) deltaFrom(file *ast.File) cue.Value {
 	return f.ctx.BuildFile(file, cue.Scope(f.ctx.BuildFile(f.file)))
 }
 
+// Merge merges the schema with the data.
+// It strip any private fields from the schema.
 func (f *File) Merge(schema *File, parents ...cue.Selector) (*File, error) {
 	sv := schema.value()
 	dv := f.value()
-	fields, err := fieldsDelta(sv, dv, parents...)
+
+	fields, err := fieldsDelta(sv, dv, defaultOpts, parents...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to generate delta: %w", err)
 	}
 
 	schemaVersion, err := schema.SchemaVersion()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get schema version: %w", err)
 	}
 
 	decls, err := generateDefaults(sv, fields, schemaVersion)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to generate defaults: %w", err)
 	}
 
 	completed := &ast.File{
@@ -106,33 +119,88 @@ func (f *File) Merge(schema *File, parents ...cue.Selector) (*File, error) {
 	delta := f.deltaFrom(completed)
 	v := unify(dv, delta)
 
+	err = v.Validate(defaultOpts...)
+	if err != nil {
+		return nil, err
+	}
+
 	return Export(f.Name, v), nil
 }
 
+// Sanitize makes sure the cue file is well formed.
 func (f *File) Sanitize() error {
 	return astutil.Sanitize(f.file)
 }
 
-func (f *File) Unify(files []*File) *File {
+// Unify merges several cue files into one.
+// Unify reports the greatest lower bound of the given files.
+func (f *File) Unify(files []*File) (*File, error) {
 	v := f.value()
 	for _, file := range files {
 		v = unify(v, file.value())
 	}
-	return Export(f.Name, v)
+	opts := append(defaultOpts, cue.Concrete(false))
+	err := v.Validate(opts...)
+	if err != nil {
+		return nil, err
+	}
+	return Export(f.Name, v), nil
 }
 
 func unify(v1, v2 cue.Value) cue.Value {
 	return v1.Unify(v2)
 }
 
-func (f *File) Json() ([]byte, error) {
-	return f.value().MarshalJSON()
+// Json returns the json representation of the cue file.
+func (f *File) Json() (string, error) {
+	return json.Marshal(f.value())
 }
 
+// Format formats the cue file.
 func (f *File) Format() ([]byte, error) {
 	return format.Node(f.file, format.Simplify())
 }
 
+// Yaml returns the yaml representation of the cue file.
+func (f *File) Yaml() ([]byte, error) {
+	buf := bytes.Buffer{}
+	buf.WriteString("---\n")
+	str, err := yaml.Marshal(f.value())
+	if err != nil {
+		return nil, err
+	}
+	_, err = buf.WriteString(str)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// Vet validates the cue file.
+// It expects the cue file to be well formed and with concrete values.
+func (f *File) Vet() error {
+	opt := append(defaultOpts, []cue.Option{
+		cue.Attributes(true),
+		cue.Definitions(true),
+		cue.Hidden(true),
+	}...)
+
+	iter, err := f.v.Fields(opt...)
+	if err != nil {
+		return err
+	}
+
+	for iter.Next() {
+		v := iter.Value()
+		err := v.Validate(append(opt, cue.Concrete(true))...)
+		if err != nil {
+			return fmt.Errorf("failed: %w", err)
+		}
+	}
+	return nil
+}
+
+// Export exports the cue value to a cue file.
 func Export(name string, v cue.Value, opts ...cue.Option) *File {
 	opts = append(defaultOpts, opts...)
 	ctx := cuecontext.New()
@@ -147,27 +215,31 @@ func Export(name string, v cue.Value, opts ...cue.Option) *File {
 }
 
 func parseFile(ctx *cue.Context, p string) (*ast.File, error) {
-	tree, err := parser.ParseFile(p, nil, parser.ParseComments)
+	return parse(ctx, p, nil)
+}
+
+func parse(ctx *cue.Context, p string, src any) (*ast.File, error) {
+	tree, err := parser.ParseFile(p, src, parser.ParseComments)
 	if err != nil {
 		return nil, err
 	}
 	return tree, nil
 }
 
-func fieldsDelta(schema, data cue.Value, parents ...cue.Selector) ([]cue.Path, error) {
+func fieldsDelta(schema, data cue.Value, opts []cue.Option, parents ...cue.Selector) ([]cue.Path, error) {
 	m := make([]cue.Path, 0)
-	i, err := schema.Fields(defaultOpts...)
+	iter, err := schema.Fields(opts...)
 	if err != nil {
 		return nil, err
 	}
 
-	for i.Next() {
-		sel := append(parents, i.Selector())
+	for iter.Next() {
+		sel := append(parents, iter.Selector())
 		path := cue.MakePath(sel...)
 
-		// skip private fields based on the private attribute
-		// e.g. @private(true)
-		attr := i.Value().Attribute(privateAttr)
+		//skip private fields based on the private attribute
+		//e.g. @private(true)
+		attr := iter.Value().Attribute(privateAttr)
 		if err := attr.Err(); err == nil {
 			continue
 		}
@@ -177,12 +249,12 @@ func fieldsDelta(schema, data cue.Value, parents ...cue.Selector) ([]cue.Path, e
 			m = append(m, path)
 		}
 
-		switch i.Value().Syntax().(type) {
+		switch iter.Value().Syntax().(type) {
 		case *ast.StructLit:
 			// recurse into the struct
 			// to find missing fields
 			x := schema.LookupPath(path)
-			n, err := fieldsDelta(x, data, sel[1:]...)
+			n, err := fieldsDelta(x, data, opts, sel[1:]...)
 			if err != nil {
 				return nil, err
 			}
@@ -212,12 +284,12 @@ func generateDefaults(input cue.Value, fields []cue.Path, schemaVersion string) 
 	return makeValues(f, paths, schemaVersion)
 }
 
-func makeValues(i *cue.Iterator, paths []string, schemaVersion string, parents ...cue.Selector) ([]ast.Decl, error) {
+func makeValues(iter *cue.Iterator, paths []string, schemaVersion string, parents ...cue.Selector) ([]ast.Decl, error) {
 	result := make([]ast.Decl, 0)
-	for i.Next() {
+	for iter.Next() {
 		var v ast.Expr
-		value := i.Value()
-		sel := append(parents, i.Selector())
+		value := iter.Value()
+		sel := append(parents, iter.Selector())
 		path := cue.MakePath(sel...)
 
 		if !slices.Contains(paths, path.String()) {

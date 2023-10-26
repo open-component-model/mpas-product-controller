@@ -5,7 +5,7 @@
 package v1alpha1
 
 import (
-	"github.com/open-component-model/ocm-controller/api/v1alpha1"
+	ocmv1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,7 +50,7 @@ func (in *ProductDeployment) IsComplete() bool {
 
 type ResourceReference struct {
 	// +required
-	v1alpha1.ElementMeta `json:",inline"`
+	ocmv1.ElementMeta `json:",inline"`
 
 	// +optional
 	ReferencePath []ocmmetav1.Identity `json:"referencePath,omitempty"`
@@ -69,11 +69,11 @@ type TargetRole struct {
 
 // Pipeline defines a set of pipeline objects.
 type Pipeline struct {
-	Name         string            `json:"name"`
-	Resource     ResourceReference `json:"resource"`
-	Localization ResourceReference `json:"localization"`
-	Schema       []byte            `json:"schema"`
-	TargetRole   TargetRole        `json:"targetRole"`
+	Name          string            `json:"name"`
+	Resource      ResourceReference `json:"resource"`
+	Localization  ResourceReference `json:"localization"`
+	Configuration Configuration     `json:"configuration"`
+	TargetRole    TargetRole        `json:"targetRole"`
 }
 
 // GetConditions returns the conditions of the ComponentVersion.

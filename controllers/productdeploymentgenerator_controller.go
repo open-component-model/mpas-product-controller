@@ -427,29 +427,37 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 		schemaFiles = append(schemaFiles, file)
 	}
 
-	schema := schemaFiles[0].Unify(schemaFiles[1:])
+	schema, err := schemaFiles[0].Unify(schemaFiles[1:])
+	if err != nil {
+		return nil, fmt.Errorf("failed to unify schemas: %w", err)
+	}
 
 	existingConfigFile, err := r.fetchExistingValues(ctx, obj.Name, project)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch ignored values: %w", err)
 	}
 
-	var configBytes []byte
+	config := schema
 	if existingConfigFile != nil {
-		config, err := existingConfigFile.Merge(schema)
+		config, err = existingConfigFile.Merge(schema)
 		if err != nil {
 			return nil, fmt.Errorf("failed to merge existing config with schema: %w", err)
 		}
+	}
 
-		err = config.Sanitize()
-		if err != nil {
-			return nil, fmt.Errorf("failed to sanitize config: %w", err)
-		}
+	err = config.Sanitize()
+	if err != nil {
+		return nil, fmt.Errorf("failed to sanitize config: %w", err)
+	}
 
-		configBytes, err = config.Format()
-		if err != nil {
-			return nil, fmt.Errorf("failed to format config: %w", err)
-		}
+	err = config.Vet()
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate configuration values file: %w", err)
+	}
+
+	configBytes, err := config.Format()
+	if err != nil {
+		return nil, fmt.Errorf("failed to format config: %w", err)
 	}
 
 	if err := os.WriteFile(filepath.Join(dir, "config.cue"), configBytes, 0o777); err != nil {
@@ -458,6 +466,34 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 
 	if err := os.WriteFile(filepath.Join(dir, "README.md"), readme, 0o777); err != nil {
 		return nil, fmt.Errorf("failed to write readme file: %w", err)
+	}
+
+	// also create a configmap with the values in yaml format
+	configYaml, err := config.Yaml()
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert config to yaml: %w", err)
+	}
+
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      obj.Name + "-values",
+			Namespace: obj.Namespace,
+		},
+	}
+
+	if _, err = ctrl.CreateOrUpdate(ctx, r.Client, configMap, func() error {
+		if configMap.Data == nil || len(configMap.Data) == 0 {
+			configMap.Data = map[string]string{
+				"values.yaml": string(configYaml),
+			}
+		}
+
+		if v, ok := configMap.Data["values.yaml"]; !ok || v != string(configYaml) {
+			configMap.Data["values.yaml"] = string(configYaml)
+		}
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("failed to create configmap: %w", err)
 	}
 
 	productDeployment.Spec = spec
@@ -509,22 +545,14 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(
 		schemaFile = file
 	}
 
-	var jsonData []byte
-	if schemaFile == nil {
-		data, err := schemaFile.Json()
-		if err != nil {
-			return v1alpha1.Pipeline{}, nil, fmt.Errorf("failed to get json data: %w", err)
-		}
-
-		jsonData = data
-	}
-
 	return v1alpha1.Pipeline{
 		Name:         p.Name,
 		Localization: p.Localization,
-		Resource:     p.Source,
-		TargetRole:   *targetRole,
-		Schema:       jsonData,
+		Configuration: v1alpha1.Configuration{
+			Rules: p.Configuration.Rules,
+		},
+		Resource:   p.Source,
+		TargetRole: *targetRole,
 	}, schemaFile, nil
 }
 
