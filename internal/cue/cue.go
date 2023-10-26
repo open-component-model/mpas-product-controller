@@ -40,16 +40,19 @@ type File struct {
 }
 
 // New creates a new File from a cue file.
-func New(name, filePath string) (*File, error) {
+// src must be a string, []byte, or io.Reader.
+// if src is nil, the file is read from filepath.
+func New(name, filepath string, src any) (*File, error) {
 	ctx := cuecontext.New()
-	file, err := parseFile(ctx, filePath)
+	file, err := parse(ctx, filepath, src)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(fmt.Errorf("failed to parse cue file: %w", err).Error())
 	}
 	return &File{
 		Name: name,
 		ctx:  ctx,
 		file: file,
+		v:    ctx.BuildFile(file),
 	}, nil
 }
 
@@ -75,6 +78,10 @@ func (f *File) Comments() string {
 		comments += s.Text()
 	}
 	return comments
+}
+
+func (f *File) setComments(cgs []*ast.CommentGroup) {
+	f.file.SetComments(cgs)
 }
 
 func (f *File) value() cue.Value {
@@ -115,7 +122,6 @@ func (f *File) Merge(schema *File, parents ...cue.Selector) (*File, error) {
 		Decls: decls,
 	}
 
-	completed.SetComments(schema.file.Comments())
 	delta := f.deltaFrom(completed)
 	v := unify(dv, delta)
 
@@ -130,6 +136,15 @@ func (f *File) Merge(schema *File, parents ...cue.Selector) (*File, error) {
 // Sanitize makes sure the cue file is well formed.
 func (f *File) Sanitize() error {
 	return astutil.Sanitize(f.file)
+}
+
+// Validate validates the cue file against the given schema.
+func (f *File) Validate(schema *File) error {
+	unified, err := f.Unify([]*File{schema})
+	if err != nil {
+		return err
+	}
+	return unified.Vet()
 }
 
 // Unify merges several cue files into one.
@@ -210,16 +225,16 @@ func Export(name string, v cue.Value, opts ...cue.Option) *File {
 		file: &ast.File{
 			Decls: v.Syntax(opts...).(*ast.StructLit).Elts,
 		},
+		v: v,
 	}
+	file.setComments(v.Doc())
 	return file
 }
 
-func parseFile(ctx *cue.Context, p string) (*ast.File, error) {
-	return parse(ctx, p, nil)
-}
-
-func parse(ctx *cue.Context, p string, src any) (*ast.File, error) {
-	tree, err := parser.ParseFile(p, src, parser.ParseComments)
+// src must be a string, []byte, or io.Reader.
+// if src is nil, the file is read from filepath.
+func parse(ctx *cue.Context, filepath string, src any) (*ast.File, error) {
+	tree, err := parser.ParseFile(filepath, src, parser.ParseComments)
 	if err != nil {
 		return nil, err
 	}

@@ -11,8 +11,6 @@ import (
 	"github.com/fluxcd/source-controller/api/v1beta2"
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
 	gitmpasv1alpha1 "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
-	"github.com/open-component-model/mpas-product-controller/pkg/validators/gitea"
-	"github.com/open-component-model/mpas-product-controller/pkg/validators/github"
 	v1alpha12 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	"github.com/open-component-model/ocm-controller/pkg/oci"
 	"github.com/open-component-model/ocm-controller/pkg/snapshot"
@@ -163,18 +161,6 @@ func main() {
 		EventRecorder:       mgr.GetEventRecorderFor("product-deployment-pipeline-scheduler"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create scheduler", "scheduler", "ProductDeploymentScheduler")
-		os.Exit(1)
-	}
-
-	giteaValidator := gitea.NewValidator(mgr.GetClient(), nil)
-	githubValidator := github.NewValidator(mgr.GetClient(), giteaValidator)
-	if err = (&controllers.ValidationReconciler{
-		Client:              mgr.GetClient(),
-		Scheme:              mgr.GetScheme(),
-		MpasSystemNamespace: mpasSystemNamespace,
-		Validator:           githubValidator,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Validation")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder
