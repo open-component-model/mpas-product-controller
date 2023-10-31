@@ -192,7 +192,10 @@ func (r *ProductDeploymentPipelineReconciler) createOrUpdateConfiguration(
 		}
 	}
 
-	pdLabel := obj.GetLabels()[v1alpha1.ProductDeploymentOwnerLabelKey]
+	pdLabel, ok := obj.GetLabels()[v1alpha1.ProductDeploymentOwnerLabelKey]
+	if !ok {
+		return nil, fmt.Errorf("failed to find product deployment label")
+	}
 
 	configuration := &ocmv1alpha1.Configuration{
 		ObjectMeta: metav1.ObjectMeta{

@@ -44,9 +44,6 @@ const (
 	// CreateSyncFailedReason is used when we fail to create a git-controller.Sync object in the cluster.
 	CreateSyncFailedReason = "CreateSyncFailed"
 
-	// CreateValidationFailedReason is used when we fail to create a Validation object in the cluster.
-	CreateValidationFailedReason = "CreateValidationFailed"
-
 	// CreateSnapshotFailedReason is used when we fail to create an ocm-controller.Snapshot object in the cluster.
 	CreateSnapshotFailedReason = "CreateSnapshotFailed"
 
@@ -70,9 +67,6 @@ const (
 
 	// PipelineTargetSelectionFailedReason is used when we fail to select a target environment for the pipeline.
 	PipelineTargetSelectionFailedReason = "PipelineTargetSelectionFailed"
-
-	// ValidationFailedReason is used when the validation of a resource failed.
-	ValidationFailedReason = "ValidationFailed"
 
 	// GitRepositoryCleanUpFailedReason is used when we couldn't delete the GitRepository.
 	GitRepositoryCleanUpFailedReason = "GitRepositoryCleanUpFailed"

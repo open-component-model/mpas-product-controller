@@ -7,7 +7,6 @@ resources:
 - bases/mpas.ocm.software_productdeploymentpipelines.yaml
 - bases/mpas.ocm.software_productdescriptions.yaml
 - bases/mpas.ocm.software_targets.yaml
-- bases/mpas.ocm.software_validations.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 # the following config is for teaching kustomize how to do kustomization for CRDs.
