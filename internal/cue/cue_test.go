@@ -212,6 +212,7 @@ labels: {
 	"app": "redis"
 	"env": "dev"
 }
+message?: string
 `,
 		},
 		{

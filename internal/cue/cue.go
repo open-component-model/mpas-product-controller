@@ -194,11 +194,9 @@ func (f *File) Yaml() ([]byte, error) {
 // Vet validates the cue file.
 // It expects the cue file to be well formed and with concrete values.
 func (f *File) Vet() error {
-	opt := append(defaultOpts, []cue.Option{
-		cue.Attributes(true),
-		cue.Definitions(true),
-		cue.Hidden(true),
-	}...)
+	opt := []cue.Option{
+		cue.Final(),
+	}
 
 	iter, err := f.v.Fields(opt...)
 	if err != nil {
