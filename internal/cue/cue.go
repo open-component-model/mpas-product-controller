@@ -248,7 +248,11 @@ func fieldsDelta(schema, data cue.Value, opts []cue.Option, parents ...cue.Selec
 
 	for iter.Next() {
 		sel := append(parents, iter.Selector())
-		path := cue.MakePath(sel...)
+		// we need the absolute path to the field for lookup
+		// but only the relative path to the field for m (missing fields)
+		// as it will be appended to a list containing parent selectors
+		absPath := cue.MakePath(sel...)
+		relPath := cue.MakePath(append([]cue.Selector{}, iter.Selector())...)
 
 		//skip private fields based on the private attribute
 		//e.g. @private(true)
@@ -257,17 +261,17 @@ func fieldsDelta(schema, data cue.Value, opts []cue.Option, parents ...cue.Selec
 			continue
 		}
 
-		entry := data.LookupPath(path)
+		entry := data.LookupPath(absPath)
 		if !entry.Exists() {
-			m = append(m, path)
+			m = append(m, relPath)
 		}
 
 		switch iter.Value().Syntax().(type) {
 		case *ast.StructLit:
 			// recurse into the struct
 			// to find missing fields
-			x := schema.LookupPath(path)
-			n, err := fieldsDelta(x, data, opts, sel[1:]...)
+			x := schema.LookupPath(absPath)
+			n, err := fieldsDelta(x, data, opts, sel...)
 			if err != nil {
 				return nil, err
 			}
