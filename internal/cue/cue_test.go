@@ -30,6 +30,25 @@ labels?: {[string]:string}
 max_replicas: replicas * 5 @private(true)
 `
 
+var modifiedSchema = `
+// This a config file for the product deployment pipeline.
+// It is named config.cue.
+
+#SchemaVersion: "v1.0.0"
+
+deployment: {
+	// this field has a default value of 2
+	replicas: *2 | int
+			
+	// this is an optional field
+	labels?: {[string]:string}
+	
+	// this is a generated field that will not be exposed to in the config.cue file
+	// part of the final configuration values
+	max_replicas: replicas * 5 @private(true)
+}
+`
+
 func generateConfigFile(t *testing.T, src string) *File {
 	f, err := New("config", "", src)
 	require.NoError(t, err)
@@ -53,9 +72,11 @@ func TestCue_ValidGeneration(t *testing.T) {
 
 func TestCue_Merge(t *testing.T) {
 	schema := generateConfigFile(t, defaultSchema)
+	modifiedSchema := generateConfigFile(t, modifiedSchema)
 	testsCases := []struct {
 		name      string
 		config    string
+		schema    *File
 		wanted    func(f *File) error
 		wantedErr func(err error) error
 	}{
@@ -64,6 +85,7 @@ func TestCue_Merge(t *testing.T) {
 			config: `
 redis_url: "http://localhost:6379"
 `,
+			schema: schema,
 			wanted: func(f *File) error {
 				s, err := f.Yaml()
 				require.NoError(t, err)
@@ -85,6 +107,7 @@ labels: {
   "env": "dev"
 }
 `,
+			schema: schema,
 			wanted: func(f *File) error {
 				s, err := f.Yaml()
 				require.NoError(t, err)
@@ -99,6 +122,7 @@ labels: {
 		{
 			name:   "invalid config empty config",
 			config: "",
+			schema: schema,
 			wantedErr: func(err error) error {
 				require.Error(t, err)
 				// we can parse an empty cue file just fine
@@ -116,9 +140,28 @@ labels: {
 	"env": "dev"
 }
 `,
+			schema: schema,
 			wantedErr: func(err error) error {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "redis_url")
+				return nil
+			},
+		},
+		{
+			name: "valid config using modified schema",
+			config: `
+replicas: 3
+redis_url: "http://localhost:6379"
+`,
+			schema: modifiedSchema,
+			wanted: func(f *File) error {
+				s, err := f.Yaml()
+				require.NoError(t, err)
+				str := string(s)
+				assert.Contains(t, str, "replicas: 3")
+				assert.Contains(t, str, "redis_url: http://localhost:6379")
+				assert.NotContains(t, str, "max_replicas: 10")
+				assert.Contains(t, str, "deployment:\n  replicas: 2\n")
 				return nil
 			},
 		},
@@ -127,7 +170,7 @@ labels: {
 	for _, tc := range testsCases {
 		t.Run(tc.name, func(t *testing.T) {
 			config := generateConfigFile(t, tc.config)
-			merged, err := config.Merge(schema)
+			merged, err := config.Merge(tc.schema)
 			require.NoError(t, err)
 
 			v := merged.value()
