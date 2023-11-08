@@ -97,13 +97,59 @@ func (f *File) deltaFrom(file *ast.File) cue.Value {
 	return f.ctx.BuildFile(file, cue.Scope(f.ctx.BuildFile(f.file)))
 }
 
+func (f *File) CopyWithoutPrivateFields() *File {
+	ctx := cuecontext.New()
+	file := &File{
+		Name: f.Name,
+		ctx:  ctx,
+		file: &ast.File{
+			Decls: f.file.Decls,
+		},
+		v: f.v,
+	}
+	removePrivateFields(&file.file.Decls)
+	file.setComments(f.v.Doc())
+	return file
+}
+
+func (f *File) ContainsPrivateFields() bool {
+	return containsPrivateFields(f.file.Decls)
+}
+
+func containsPrivateFields(values []ast.Decl) bool {
+	for _, decl := range values {
+		if f, ok := decl.(*ast.Field); ok {
+			if len(f.Attrs) > 0 && f.Attrs[0].Text == "@private(true)" {
+				return true
+			}
+			if val, ok := f.Value.(*ast.StructLit); ok {
+				return containsPrivateFields(val.Elts)
+			}
+		}
+	}
+	return false
+}
+
+func removePrivateFields(values *[]ast.Decl) {
+	for i, decl := range *values {
+		if f, ok := decl.(*ast.Field); ok {
+			if len(f.Attrs) > 0 && f.Attrs[0].Text == "@private(true)" {
+				*values = append((*values)[:i], (*values)[i+1:]...)
+			}
+			if val, ok := f.Value.(*ast.StructLit); ok {
+				removePrivateFields(&val.Elts)
+			}
+		}
+	}
+}
+
 // Merge merges the schema with the data.
 // It strip any private fields from the schema.
-func (f *File) Merge(schema *File, parents ...cue.Selector) (*File, error) {
+func (f *File) Merge(schema *File, withPrivate bool, parents ...cue.Selector) (*File, error) {
 	sv := schema.value()
 	dv := f.value()
 
-	fields, err := fieldsDelta(sv, dv, defaultOpts, parents...)
+	fields, err := fieldsDelta(sv, dv, defaultOpts, withPrivate, parents...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate delta: %w", err)
 	}
@@ -239,7 +285,7 @@ func parse(ctx *cue.Context, filepath string, src any) (*ast.File, error) {
 	return tree, nil
 }
 
-func fieldsDelta(schema, data cue.Value, opts []cue.Option, parents ...cue.Selector) ([]cue.Path, error) {
+func fieldsDelta(schema, data cue.Value, opts []cue.Option, withPrivate bool, parents ...cue.Selector) ([]cue.Path, error) {
 	m := make([]cue.Path, 0)
 	iter, err := schema.Fields(opts...)
 	if err != nil {
@@ -256,9 +302,11 @@ func fieldsDelta(schema, data cue.Value, opts []cue.Option, parents ...cue.Selec
 
 		//skip private fields based on the private attribute
 		//e.g. @private(true)
-		attr := iter.Value().Attribute(privateAttr)
-		if err := attr.Err(); err == nil {
-			continue
+		if !withPrivate {
+			attr := iter.Value().Attribute(privateAttr)
+			if err := attr.Err(); err == nil {
+				continue
+			}
 		}
 
 		entry := data.LookupPath(absPath)
@@ -271,7 +319,7 @@ func fieldsDelta(schema, data cue.Value, opts []cue.Option, parents ...cue.Selec
 			// recurse into the struct
 			// to find missing fields
 			x := schema.LookupPath(absPath)
-			n, err := fieldsDelta(x, data, opts, sel...)
+			n, err := fieldsDelta(x, data, opts, withPrivate, sel...)
 			if err != nil {
 				return nil, err
 			}
@@ -297,7 +345,6 @@ func generateDefaults(input cue.Value, fields []cue.Path, schemaVersion string) 
 	for _, p := range fields {
 		paths = append(paths, p.String())
 	}
-
 	return makeValues(f, paths, schemaVersion)
 }
 
@@ -319,7 +366,7 @@ func makeValues(iter *cue.Iterator, paths []string, schemaVersion string, parent
 			switch value.Syntax(cue.Raw()).(type) {
 			case *ast.StructLit:
 				var rx []ast.Decl
-				f, err := value.Fields()
+				f, err := value.Fields(defaultOpts...)
 				if err != nil {
 					return nil, err
 				}
