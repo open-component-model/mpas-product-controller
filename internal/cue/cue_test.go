@@ -39,7 +39,10 @@ var modifiedSchema = `
 deployment: {
 	// this field has a default value of 2
 	replicas: *2 | int
-			
+	
+	// this is a required field with of type string with a constraint
+	redis_url!: *"http://localhost:6379" | string & =~ "^https://"
+
 	// this is an optional field
 	labels?: {[string]:string}
 	
@@ -68,6 +71,66 @@ func TestCue_ValidGeneration(t *testing.T) {
 	form, err := f.Format()
 	require.NoError(t, err)
 	assert.NotNil(t, form)
+}
+
+func TestCue_CopyWithoutPrivateFields(t *testing.T) {
+	testCase := []struct {
+		name     string
+		config   string
+		expected func(t *testing.T, f []byte) error
+	}{
+		{
+			name: "valid config using default values",
+			config: `
+#SchemaVersion: "v1.0.0"
+// this field has a default value of 2
+replicas: *2 | int
+max_replicas: replicas * 5 @private(true)
+`,
+			expected: func(t *testing.T, f []byte) error {
+				str := string(f)
+				assert.Contains(t, str, "replicas: *2 | int")
+				assert.NotContains(t, str, "max_replicas: replicas * 5 @private(true)")
+				return nil
+			},
+		},
+		{
+			name: "valid config with nested fields",
+			config: `
+#SchemaVersion: "v1.0.0"
+// this field has a default value of 2
+replicas: *2 | int
+deployment: {
+	// this field has a default value of 2
+	replicas: *2 | int
+	max_replicas: replicas * 5 @private(true)
+}
+`,
+			expected: func(t *testing.T, f []byte) error {
+				str := string(f)
+				assert.Contains(t, str, "replicas: *2 | int")
+				assert.NotContains(t, str, "max_replicas: replicas * 5 @private(true)")
+				return nil
+			},
+		},
+	}
+
+	for _, tc := range testCase {
+		t.Run(tc.name, func(t *testing.T) {
+			config := generateConfigFile(t, tc.config)
+			ok := config.ContainsPrivateFields()
+			assert.True(t, ok)
+			f2 := config.CopyWithoutPrivateFields()
+
+			version, err := f2.SchemaVersion()
+			require.NoError(t, err)
+			assert.Equal(t, "v1.0.0", version)
+
+			form, err := f2.Format()
+			require.NoError(t, err)
+			tc.expected(t, form)
+		})
+	}
 }
 
 func TestCue_Merge(t *testing.T) {
@@ -161,7 +224,7 @@ redis_url: "http://localhost:6379"
 				assert.Contains(t, str, "replicas: 3")
 				assert.Contains(t, str, "redis_url: http://localhost:6379")
 				assert.NotContains(t, str, "max_replicas: 10")
-				assert.Contains(t, str, "deployment:\n  replicas: 2\n")
+				assert.Contains(t, str, "deployment:\n  replicas: 2\n  redis_url: http://localhost:6379\n  labels: {}\n")
 				return nil
 			},
 		},
@@ -170,7 +233,7 @@ redis_url: "http://localhost:6379"
 	for _, tc := range testsCases {
 		t.Run(tc.name, func(t *testing.T) {
 			config := generateConfigFile(t, tc.config)
-			merged, err := config.Merge(tc.schema)
+			merged, err := config.Merge(tc.schema, false)
 			require.NoError(t, err)
 
 			v := merged.value()
@@ -303,7 +366,7 @@ labels?: {[string]:string}
 	for _, tc := range testsCases {
 		t.Run(tc.name, func(t *testing.T) {
 			config := generateConfigFile(t, tc.config)
-			merged, err := config.Merge(schema)
+			merged, err := config.Merge(schema, false)
 			require.NoError(t, err)
 			err = merged.Validate(schema)
 			if tc.wantedErr != nil {

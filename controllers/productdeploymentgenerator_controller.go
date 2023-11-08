@@ -455,10 +455,27 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	}
 
 	config := schema
+	var configNoPrivate *cue.File
 	if existingConfigFile != nil {
-		config, err = existingConfigFile.Merge(schema)
+		// we need the final config to hold private fields
+		config, err = existingConfigFile.Merge(schema, true)
 		if err != nil {
 			return nil, fmt.Errorf("failed to merge existing config with schema: %w", err)
+		}
+
+		// but need a config without private fields for generated the config file
+		if config.ContainsPrivateFields() {
+			configNoPrivate, err = existingConfigFile.Merge(schema, false)
+			if err != nil {
+				return nil, fmt.Errorf("failed to merge existing config with schema: %w", err)
+			}
+		} else {
+			configNoPrivate = config
+		}
+
+		err = configNoPrivate.Sanitize()
+		if err != nil {
+			return nil, fmt.Errorf("failed to sanitize config: %w", err)
 		}
 	}
 
@@ -472,16 +489,20 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 		return nil, fmt.Errorf("failed to validate configuration values file: %w", err)
 	}
 
-	configBytes, err := config.Format()
+	if configNoPrivate == nil {
+		configNoPrivate = config.CopyWithoutPrivateFields()
+	}
+
+	configBytes, err := configNoPrivate.Format()
 	if err != nil {
 		return nil, fmt.Errorf("failed to format config: %w", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, "config.cue"), configBytes, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "config.cue"), configBytes, 0o644); err != nil {
 		return nil, fmt.Errorf("failed to write configuration values file: %w", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, "README.md"), readme, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), readme, 0o644); err != nil {
 		return nil, fmt.Errorf("failed to write readme file: %w", err)
 	}
 
@@ -490,7 +511,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert config to yaml: %w", err)
 	}
-	err = r.generateConfigMap(ctx, obj.Name, obj.Namespace, string(configYaml))
+	err = r.generateConfigMap(ctx, obj, string(configYaml))
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate configmap: %w", err)
 	}
@@ -502,16 +523,22 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	return productDeployment, nil
 }
 
-func (r *ProductDeploymentGeneratorReconciler) generateConfigMap(ctx context.Context, name, namespace, config string) error {
+func (r *ProductDeploymentGeneratorReconciler) generateConfigMap(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator, config string) error {
 
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name + "-values",
-			Namespace: namespace,
+			Name:      obj.Name + "-values",
+			Namespace: obj.Namespace,
 		},
 	}
 
 	if _, err := ctrl.CreateOrUpdate(ctx, r.Client, configMap, func() error {
+		if configMap.ObjectMeta.CreationTimestamp.IsZero() {
+			if err := controllerutil.SetOwnerReference(obj, configMap, r.Scheme); err != nil {
+				return fmt.Errorf("failed to set owner to sync object: %w", err)
+			}
+		}
+
 		if configMap.Data == nil || len(configMap.Data) == 0 {
 			configMap.Data = map[string]string{
 				"values.yaml": config,
