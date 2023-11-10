@@ -97,7 +97,9 @@ func (f *File) deltaFrom(file *ast.File) cue.Value {
 	return f.ctx.BuildFile(file, cue.Scope(f.ctx.BuildFile(f.file)))
 }
 
-func (f *File) CopyWithoutPrivateFields() *File {
+// CopyWithoutPrivateFields returns a copy of the cue file without private fields.
+// note: calling Eval() after CopyWithoutPrivateFields() will add the private fields back.
+func (f *File) EvalWithoutPrivateFields() *File {
 	ctx := cuecontext.New()
 	file := &File{
 		Name: f.Name,
@@ -107,11 +109,24 @@ func (f *File) CopyWithoutPrivateFields() *File {
 		},
 		v: f.v,
 	}
+
+	syn := []cue.Option{
+		cue.Final(),
+		cue.Definitions(true),
+		cue.Attributes(true),
+		cue.Optional(false),
+		cue.ErrorsAsValues(false),
+	}
+
+	file = eval(f, syn)
+
 	removePrivateFields(&file.file.Decls)
+	f.v = ctx.BuildFile(file.file)
 	file.setComments(f.v.Doc())
 	return file
 }
 
+// ContainsPrivateFields returns true if the cue file contains private fields.
 func (f *File) ContainsPrivateFields() bool {
 	return containsPrivateFields(f.file.Decls)
 }
@@ -145,11 +160,11 @@ func removePrivateFields(values *[]ast.Decl) {
 
 // Merge merges the schema with the data.
 // It strip any private fields from the schema.
-func (f *File) Merge(schema *File, withPrivate bool, parents ...cue.Selector) (*File, error) {
+func (f *File) Merge(schema *File, parents ...cue.Selector) (*File, error) {
 	sv := schema.value()
 	dv := f.value()
 
-	fields, err := fieldsDelta(sv, dv, defaultOpts, withPrivate, parents...)
+	fields, err := fieldsDelta(sv, dv, defaultOpts, parents...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate delta: %w", err)
 	}
@@ -237,6 +252,35 @@ func (f *File) Yaml() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// Eval evaluates the cue file.
+// It expects the cue file to be well formed.
+// Optional fields and attributes are removed.
+func (f *File) Eval() *File {
+	syn := []cue.Option{
+		cue.Final(),
+		cue.Definitions(true),
+		cue.Attributes(false),
+		cue.Optional(false),
+		cue.ErrorsAsValues(false),
+	}
+
+	return eval(f, syn)
+}
+
+func eval(f *File, syn []cue.Option) *File {
+	v := f.value()
+	node := v.Syntax(syn...)
+	newfile := &ast.File{
+		Filename: f.file.Filename,
+		Decls:    node.(*ast.StructLit).Elts,
+	}
+	f.file = newfile
+	f.v = f.ctx.BuildFile(newfile)
+	f.setComments(v.Doc())
+
+	return f
+}
+
 // Vet validates the cue file.
 // It expects the cue file to be well formed and with concrete values.
 func (f *File) Vet() error {
@@ -285,7 +329,7 @@ func parse(ctx *cue.Context, filepath string, src any) (*ast.File, error) {
 	return tree, nil
 }
 
-func fieldsDelta(schema, data cue.Value, opts []cue.Option, withPrivate bool, parents ...cue.Selector) ([]cue.Path, error) {
+func fieldsDelta(schema, data cue.Value, opts []cue.Option, parents ...cue.Selector) ([]cue.Path, error) {
 	m := make([]cue.Path, 0)
 	iter, err := schema.Fields(opts...)
 	if err != nil {
@@ -302,11 +346,9 @@ func fieldsDelta(schema, data cue.Value, opts []cue.Option, withPrivate bool, pa
 
 		//skip private fields based on the private attribute
 		//e.g. @private(true)
-		if !withPrivate {
-			attr := iter.Value().Attribute(privateAttr)
-			if err := attr.Err(); err == nil {
-				continue
-			}
+		attr := iter.Value().Attribute(privateAttr)
+		if err := attr.Err(); err == nil {
+			continue
 		}
 
 		entry := data.LookupPath(absPath)
@@ -319,7 +361,7 @@ func fieldsDelta(schema, data cue.Value, opts []cue.Option, withPrivate bool, pa
 			// recurse into the struct
 			// to find missing fields
 			x := schema.LookupPath(absPath)
-			n, err := fieldsDelta(x, data, opts, withPrivate, sel...)
+			n, err := fieldsDelta(x, data, opts, sel...)
 			if err != nil {
 				return nil, err
 			}
