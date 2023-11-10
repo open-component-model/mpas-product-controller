@@ -450,34 +450,24 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 		return nil, fmt.Errorf("failed to fetch ignored values: %w", err)
 	}
 
-	config := schema
-	var configNoPrivate *cue.File
-	if existingConfigFile != nil {
-		// we need the final config to hold private fields
-		config, err = existingConfigFile.Merge(schema, true)
+	values := schema
+	var config *cue.File
+	if existingConfigFile == nil {
+		config = values.EvalWithoutPrivateFields()
+	} else {
+		config, err = existingConfigFile.Merge(schema)
 		if err != nil {
-			return nil, fmt.Errorf("failed to merge existing config with schema: %w", err)
+			return nil, fmt.Errorf("failed to merge existing values with schema: %w", err)
 		}
-
-		// but need a config without private fields for generated the config file
-		if config.ContainsPrivateFields() {
-			configNoPrivate, err = existingConfigFile.Merge(schema, false)
-			if err != nil {
-				return nil, fmt.Errorf("failed to merge existing config with schema: %w", err)
-			}
-		} else {
-			configNoPrivate = config
-		}
-
-		err = configNoPrivate.Sanitize()
-		if err != nil {
-			return nil, fmt.Errorf("failed to sanitize config: %w", err)
-		}
+		// Evaluate the configuration file to get the final values.
+		// we do this here to make sure that the values file does not contain any
+		// optional or expr fields that are not set.
+		config = config.Eval()
 	}
 
 	err = config.Sanitize()
 	if err != nil {
-		return nil, fmt.Errorf("failed to sanitize config: %w", err)
+		return nil, fmt.Errorf("failed to sanitize values: %w", err)
 	}
 
 	err = config.Validate(schema)
@@ -485,13 +475,16 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 		return nil, fmt.Errorf("failed to validate configuration values file: %w", err)
 	}
 
-	if configNoPrivate == nil {
-		configNoPrivate = config.CopyWithoutPrivateFields()
+	if existingConfigFile != nil {
+		values, err = config.Unify([]*cue.File{schema})
+		if err != nil {
+			return nil, fmt.Errorf("failed to unify values with schema: %w", err)
+		}
 	}
 
-	configBytes, err := configNoPrivate.Format()
+	configBytes, err := config.Format()
 	if err != nil {
-		return nil, fmt.Errorf("failed to format config: %w", err)
+		return nil, fmt.Errorf("failed to format values: %w", err)
 	}
 
 	if err := os.WriteFile(filepath.Join(dir, "config.cue"), configBytes, 0o644); err != nil {
@@ -503,11 +496,11 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	}
 
 	// also create a configmap with the values in yaml format
-	configYaml, err := config.Yaml()
+	valuesYaml, err := values.Yaml()
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert config to yaml: %w", err)
+		return nil, fmt.Errorf("failed to convert values to yaml: %w", err)
 	}
-	err = r.generateConfigMap(ctx, obj, string(configYaml))
+	err = r.generateConfigMap(ctx, obj, string(valuesYaml))
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate configmap: %w", err)
 	}
@@ -519,10 +512,12 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	return productDeployment, nil
 }
 
-func (r *ProductDeploymentGeneratorReconciler) generateConfigMap(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator, config string) error {
+func (r *ProductDeploymentGeneratorReconciler) generateConfigMap(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator, values string) error {
 
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
+			// TODO@souleb: The config name should be  a hash of the values
+			// and should gc with a max of configmap and by timestamp
 			Name:      obj.Name + "-values",
 			Namespace: obj.Namespace,
 		},
@@ -537,12 +532,12 @@ func (r *ProductDeploymentGeneratorReconciler) generateConfigMap(ctx context.Con
 
 		if configMap.Data == nil || len(configMap.Data) == 0 {
 			configMap.Data = map[string]string{
-				"values.yaml": config,
+				"values.yaml": values,
 			}
 		}
 
-		if v, ok := configMap.Data["values.yaml"]; !ok || v != config {
-			configMap.Data["values.yaml"] = config
+		if v, ok := configMap.Data["values.yaml"]; !ok || v != values {
+			configMap.Data["values.yaml"] = values
 		}
 		return nil
 	}); err != nil {

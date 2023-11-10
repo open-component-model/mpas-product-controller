@@ -244,8 +244,11 @@ func TestProductDeploymentGeneratorReconciler(t *testing.T) {
 	modifiedReadme, err := os.ReadFile(filepath.Join("testdata", "modified_readme.md"))
 	require.NoError(t, err)
 
+	configFile, err := os.ReadFile(filepath.Join("testdata", "config.cue"))
+	require.NoError(t, err)
+
 	assert.Equal(t, string(modifiedReadme), fakeWriter.readmeContent)
-	assert.Equal(t, string(schema), fakeWriter.valuesContent)
+	assert.Equal(t, string(configFile), fakeWriter.valuesContent)
 
 	productDeployment, err := os.ReadFile(filepath.Join("testdata", "product_deployment.yaml"))
 	require.NoError(t, err)

@@ -2,13 +2,6 @@ module github.com/open-component-model/mpas-product-controller
 
 go 1.21
 
-// Docker dependencies. At the moment if this writing without these the build fails with:
-// cannot use remote (variable of type *"github.com/docker/docker/registry".Service) as "github.com/docker/docker/registry".Service value in argument to c.loginWithTLS
-replace (
-	github.com/docker/cli => github.com/docker/cli v23.0.5+incompatible
-	github.com/docker/docker => github.com/docker/docker v23.0.5+incompatible
-)
-
 replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20220411205349-bde1400a84be
 
 // Flux dependent re-writes. These are needed to be compatible with the flux version at all times.
