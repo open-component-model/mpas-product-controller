@@ -79,6 +79,17 @@ func (in ProductDeploymentGenerator) GetRequeueAfter() time.Duration {
 	return in.Spec.Interval.Duration
 }
 
+func (in *ProductDeploymentGenerator) GetVID() map[string]string {
+	metadata := make(map[string]string)
+	metadata[GroupVersion.Group+"/product_deployment_generator"] = in.Status.LatestSnapshotDigest
+
+	return metadata
+}
+
+func (in *ProductDeploymentGenerator) SetObservedGeneration(v int64) {
+	in.Status.ObservedGeneration = v
+}
+
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 

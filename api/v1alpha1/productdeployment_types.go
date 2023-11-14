@@ -5,8 +5,8 @@
 package v1alpha1
 
 import (
+	"github.com/open-component-model/ocm-controller/api/v1alpha1"
 	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
-	"github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/versions/ocm.software/v3alpha1"
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -50,7 +50,7 @@ func (in *ProductDeployment) IsComplete() bool {
 
 type ResourceReference struct {
 	// +required
-	v3alpha1.ElementMeta `json:",inline"`
+	v1alpha1.ElementMeta `json:",inline"`
 
 	// +optional
 	ReferencePath []ocmmetav1.Identity `json:"referencePath,omitempty"`
@@ -85,6 +85,17 @@ func (in *ProductDeployment) GetConditions() []metav1.Condition {
 // SetConditions sets the conditions of the ComponentVersion.
 func (in *ProductDeployment) SetConditions(conditions []metav1.Condition) {
 	in.Status.Conditions = conditions
+}
+
+func (in *ProductDeployment) GetVID() map[string]string {
+	metadata := make(map[string]string)
+	metadata[GroupVersion.Group+"/product_deployment"] = in.Name
+
+	return metadata
+}
+
+func (in *ProductDeployment) SetObservedGeneration(v int64) {
+	in.Status.ObservedGeneration = v
 }
 
 //+kubebuilder:object:root=true

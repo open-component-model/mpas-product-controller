@@ -8,8 +8,20 @@ const (
 	// ComponentSubscriptionGetFailedReason is used when the subscription object cannot be found.
 	ComponentSubscriptionGetFailedReason = "ComponentSubscriptionGetFailed"
 
+	// ComponentSubscriptionNotReadyReason is used when the subscription object cannot be found.
+	ComponentSubscriptionNotReadyReason = "ComponentSubscriptionNotReady"
+
+	// SemverParseFailedReason is used when we failed to parse a semver.
+	SemverParseFailedReason = "SemverParseFailed"
+
 	// ProjectInNamespaceGetFailedReason is used when the Project in a given namespace has not been found.
 	ProjectInNamespaceGetFailedReason = "ProjectInNamespaceGetFailed"
+
+	// ProjectNotReadyReason is used when the Project in a given namespace has not been found.
+	ProjectNotReadyReason = "ProjectNotReady"
+
+	// RepositoryInformationMissingReason is used when the Project in a given namespace has not been found.
+	RepositoryInformationMissingReason = "RepositoryInformationMissing"
 
 	// ComponentVersionGetFailedReason is used when the subscription object cannot be found.
 	ComponentVersionGetFailedReason = "ComponentVersionGetFailed"
@@ -19,6 +31,9 @@ const (
 
 	// ProductDescriptionGetFailedReason happens when we don't find the product description or fail to process it.
 	ProductDescriptionGetFailedReason = "ProductDescriptionGetFailed"
+
+	// TemporaryFolderGenerationFailedReason happens when we don't find the product description or fail to process it.
+	TemporaryFolderGenerationFailedReason = "TemporaryFolderGenerationFailed"
 
 	// CreateProductPipelineFailedReason is used when we fail to create a product pipeline base on a product description.
 	CreateProductPipelineFailedReason = "CreateProductPipelineFailed"

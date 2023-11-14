@@ -10,11 +10,11 @@ import (
 	"github.com/open-component-model/mpas-product-controller/pkg/deployers"
 	"github.com/open-component-model/ocm-controller/api/v1alpha1"
 	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
-	"github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/versions/ocm.software/v3alpha1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -49,7 +49,7 @@ func TestSnapshotIsAvailable(t *testing.T) {
 		Spec: mpasv1alpha1.ProductDeploymentPipelineSpec{
 			ComponentVersionRef: "test-pipeline-component-version",
 			Resource: mpasv1alpha1.ResourceReference{
-				ElementMeta: v3alpha1.ElementMeta{
+				ElementMeta: v1alpha1.ElementMeta{
 					Name:    "backend",
 					Version: "0.0.1",
 				},
@@ -60,7 +60,7 @@ func TestSnapshotIsAvailable(t *testing.T) {
 				},
 			},
 			Localization: mpasv1alpha1.ResourceReference{
-				ElementMeta: v3alpha1.ElementMeta{
+				ElementMeta: v1alpha1.ElementMeta{
 					Name:    "manifests",
 					Version: "0.0.1",
 				},
@@ -97,6 +97,7 @@ func TestSnapshotIsAvailable(t *testing.T) {
 		Scheme:              env.scheme,
 		MpasSystemNamespace: "mpas-system",
 		Deployer:            &mockDeployer{},
+		EventRecorder:       record.NewFakeRecorder(32),
 	}
 
 	_, err := mgr.Reconcile(context.Background(), ctrl.Request{
@@ -122,7 +123,7 @@ func TestSnapshotIsUnavailable(t *testing.T) {
 		Spec: mpasv1alpha1.ProductDeploymentPipelineSpec{
 			ComponentVersionRef: "test-pipeline-component-version",
 			Resource: mpasv1alpha1.ResourceReference{
-				ElementMeta: v3alpha1.ElementMeta{
+				ElementMeta: v1alpha1.ElementMeta{
 					Name:    "backend",
 					Version: "0.0.1",
 				},
@@ -133,7 +134,7 @@ func TestSnapshotIsUnavailable(t *testing.T) {
 				},
 			},
 			Localization: mpasv1alpha1.ResourceReference{
-				ElementMeta: v3alpha1.ElementMeta{
+				ElementMeta: v1alpha1.ElementMeta{
 					Name:    "manifests",
 					Version: "0.0.1",
 				},
@@ -169,6 +170,7 @@ func TestSnapshotIsUnavailable(t *testing.T) {
 		Scheme:              env.scheme,
 		MpasSystemNamespace: "mpas-system",
 		Deployer:            &mockDeployer{},
+		EventRecorder:       record.NewFakeRecorder(32),
 	}
 
 	_, err := mgr.Reconcile(context.Background(), ctrl.Request{

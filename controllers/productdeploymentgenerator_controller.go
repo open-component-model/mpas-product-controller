@@ -17,14 +17,18 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
+	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
 	"github.com/fluxcd/source-controller/api/v1beta2"
 	goyaml "github.com/goccy/go-yaml"
 	goyamlast "github.com/goccy/go-yaml/ast"
 	goyamlparser "github.com/goccy/go-yaml/parser"
 	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
+	"github.com/open-component-model/ocm-controller/pkg/event"
+	"github.com/open-component-model/ocm-controller/pkg/status"
 	markdown "github.com/teekennedy/goldmark-markdown"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -40,6 +44,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
 	"k8s.io/apimachinery/pkg/types"
 	kyaml "k8s.io/apimachinery/pkg/util/yaml"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -87,6 +92,7 @@ type ProductDeploymentGeneratorReconciler struct {
 	OCMClient           mpasocm.Contract
 	SnapshotWriter      snapshot.Writer
 	MpasSystemNamespace string
+	EventRecorder       record.EventRecorder
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -152,40 +158,33 @@ func (r *ProductDeploymentGeneratorReconciler) Reconcile(ctx context.Context, re
 			return
 		}
 
-		// Set status observed generation option if the component is stalled or ready.
-		if conditions.IsStalled(obj) || conditions.IsReady(obj) {
-			obj.Status.ObservedGeneration = obj.Generation
-		}
-
-		// Update the object.
-		if perr := patchHelper.Patch(ctx, obj); perr != nil {
-			err = errors.Join(err, perr)
+		if derr := status.UpdateStatus(ctx, patchHelper, obj, r.EventRecorder, 0); derr != nil {
+			err = errors.Join(err, derr)
 		}
 	}()
 
-	// Remove any stale Ready condition, most likely False, set above. Its value
-	// is derived from the overall result of the reconciliation in the deferred
-	// block at the very end.
-	conditions.Delete(obj, meta.ReadyCondition)
+	// Starts the progression by setting ReconcilingCondition.
+	// This will be checked in defer.
+	// Should only be deleted on a success.
+	rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason, "reconciliation in progress for resource: %s", obj.Name)
 
 	return r.reconcile(ctx, obj)
 }
 
 func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator) (_ ctrl.Result, err error) {
-	logger := log.FromContext(ctx)
 	subscription := &replicationv1.ComponentSubscription{}
 
 	if err := r.Get(ctx, types.NamespacedName{
 		Name:      obj.Spec.SubscriptionRef.Name,
 		Namespace: obj.Spec.SubscriptionRef.Namespace,
 	}, subscription); err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ComponentSubscriptionGetFailedReason, err.Error())
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.ComponentSubscriptionGetFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to find subscription object: %w", err)
 	}
 
 	if !conditions.IsReady(subscription) {
-		logger.Info("referenced subscription isn't ready yet, requeuing")
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.ComponentSubscriptionNotReadyReason, "component subscription not ready yet")
 
 		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 	}
@@ -193,54 +192,58 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	if obj.Status.LastReconciledVersion != "" {
 		lastReconciledGeneratorVersion, err := semver.NewVersion(obj.Status.LastReconciledVersion)
 		if err != nil {
+			status.MarkNotReady(r.EventRecorder, obj, v1alpha1.SemverParseFailedReason, err.Error())
+
 			return ctrl.Result{}, fmt.Errorf("failed to parse last reconciled version: %w", err)
 		}
 
 		lastReconciledSubscription, err := semver.NewVersion(subscription.Status.LastAppliedVersion)
 		if err != nil {
+			status.MarkNotReady(r.EventRecorder, obj, v1alpha1.SemverParseFailedReason, err.Error())
+
 			return ctrl.Result{}, fmt.Errorf("failed to parse last reconciled version: %w", err)
 		}
 
 		if lastReconciledSubscription.Equal(lastReconciledGeneratorVersion) || lastReconciledSubscription.LessThan(lastReconciledGeneratorVersion) {
 			conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
+			event.New(r.EventRecorder, obj, eventv1.EventSeverityInfo, "Reconciliation success", nil)
 
-			logger.Info("data generator version is greater than or equal to last reconciled subscription version", "generator", lastReconciledGeneratorVersion.Original(), "subscription", lastReconciledSubscription.Original())
 			return ctrl.Result{}, nil
 		}
 	}
 
 	project, err := GetProjectFromObjectNamespace(ctx, r.Client, obj, r.MpasSystemNamespace)
 	if err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to find the project in the namespace: %w", err)
 	}
 
 	if !conditions.IsReady(project) {
-		logger.Info("project not ready yet")
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.ProjectNotReadyReason, "project not ready yet")
 
 		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 	}
 
 	if project.Status.RepositoryRef == nil {
-		logger.Info("no repository information is provided yet")
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.RepositoryInformationMissingReason, "repository information missing")
 
 		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
 	}
 
 	component := subscription.GetComponentVersion()
-	logger.Info("fetching component", "component", component)
+	rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason, "fetching component %s", component.Name)
 
 	octx, err := r.OCMClient.CreateAuthenticatedOCMContext(ctx, obj.Spec.ServiceAccountName, obj.Namespace)
 	if err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.OCMAuthenticationFailedReason, err.Error())
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.OCMAuthenticationFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to authenticate using service account: %w", err)
 	}
 
 	cv, err := r.OCMClient.GetComponentVersion(ctx, octx, component.Registry.URL, component.Name, component.Version)
 	if err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ComponentVersionGetFailedReason, err.Error())
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.ComponentVersionGetFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to authenticate using service account: %w", err)
 	}
@@ -250,26 +253,26 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		}
 	}()
 
-	logger.Info("retrieved component version, fetching ProductDescription resource", "component", cv.GetName())
+	rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason, "fetching component description %s", component.Name)
 
 	content, err := r.OCMClient.GetProductDescription(ctx, octx, cv)
 	if err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to get product description data: %w", err)
 	}
 
 	prodDesc := &v1alpha1.ProductDescription{}
 	if err := kyaml.Unmarshal(content, prodDesc); err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to unmarshal product description: %w", err)
 	}
 
-	logger.Info("fetched product description", "description", klog.KObj(prodDesc))
-
 	dir, err := os.MkdirTemp("", "product-deployment")
 	if err != nil {
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.TemporaryFolderGenerationFailedReason, err.Error())
+
 		return ctrl.Result{}, fmt.Errorf("failed to create temp folder: %w", err)
 	}
 
@@ -281,8 +284,12 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 	// Create top-level product folder.
 	if err := os.Mkdir(filepath.Join(dir, obj.Name), 0o777); err != nil {
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.TemporaryFolderGenerationFailedReason, err.Error())
+
 		return ctrl.Result{}, fmt.Errorf("failed to create product folder: %w", err)
 	}
+
+	rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason, "generation kubernetes resources")
 
 	productFolder := filepath.Join(dir, obj.Name)
 
@@ -291,13 +298,13 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	productDeployment, err := r.createProductDeployment(ctx, obj, *prodDesc, component, productFolder, cv, &validationRules, project)
 	if err != nil {
 		if errors.Is(err, unschedulableError) {
-			conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ProductPipelineSchedulingFailedReason, err.Error())
+			status.MarkNotReady(r.EventRecorder, obj, v1alpha1.ProductPipelineSchedulingFailedReason, err.Error())
 
 			// stop reconciling until fixed
 			return ctrl.Result{}, nil
 		}
 
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CreateProductPipelineFailedReason, err.Error())
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.CreateProductPipelineFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to create product deployment: %w", err)
 	}
@@ -305,13 +312,13 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	// Note that we pass in the top level folder here.
 	snapshotName, err := r.createSnapshot(ctx, obj, productDeployment, component, dir)
 	if err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CreateSnapshotFailedReason, err.Error())
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.CreateSnapshotFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to create snapshot for product deployment: %w", err)
 	}
 
 	if project.Spec.Git.CommitTemplate == nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CommitTemplateEmptyReason, "commit template in project cannot be empty")
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.CommitTemplateEmptyReason, "commit template in project cannot be empty")
 
 		return ctrl.Result{}, fmt.Errorf("commit template in project cannot be empty")
 	}
@@ -366,7 +373,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 		return nil
 	}); err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CreateSyncFailedReason, err.Error())
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.CreateSyncFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to create sync request: %w", err)
 	}
@@ -401,13 +408,16 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 		return nil
 	}); err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.CreateValidationFailedReason, err.Error())
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.CreateValidationFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to create validation request: %w", err)
 	}
 
+	rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason, "components applied and generated")
+
 	obj.Status.LastReconciledVersion = component.Version
-	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
+	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Applied version: %s", component.Version)
+	event.New(r.EventRecorder, obj, eventv1.EventSeverityInfo, "Reconciliation success", nil)
 
 	return ctrl.Result{}, nil
 }
