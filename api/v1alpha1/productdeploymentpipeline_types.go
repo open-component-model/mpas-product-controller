@@ -59,6 +59,17 @@ func (in *ProductDeploymentPipeline) SetConditions(conditions []metav1.Condition
 	in.Status.Conditions = conditions
 }
 
+func (in *ProductDeploymentPipeline) GetVID() map[string]string {
+	metadata := make(map[string]string)
+	metadata[GroupVersion.Group+"/product_deployment_pipeline"] = in.Name
+
+	return metadata
+}
+
+func (in *ProductDeploymentPipeline) SetObservedGeneration(v int64) {
+	in.Status.ObservedGeneration = v
+}
+
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 

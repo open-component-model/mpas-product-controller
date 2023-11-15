@@ -15,6 +15,7 @@ import (
 	v1 "github.com/fluxcd/source-controller/api/v1"
 	"github.com/fluxcd/source-controller/api/v1beta2"
 	"github.com/stretchr/testify/assert"
+	"k8s.io/client-go/tools/record"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -222,6 +223,7 @@ func TestProductDeploymentGeneratorReconciler(t *testing.T) {
 		OCMClient:           fakeOcmClient,
 		SnapshotWriter:      fakeWriter,
 		MpasSystemNamespace: "mpas-system",
+		EventRecorder:       record.NewFakeRecorder(32),
 	}
 
 	_, err = reconciler.Reconcile(context.Background(), ctrl.Request{
@@ -436,6 +438,7 @@ func TestProductDeploymentGeneratorReconcilerWithValueFile(t *testing.T) {
 		OCMClient:           fakeOcmClient,
 		SnapshotWriter:      fakeWriter,
 		MpasSystemNamespace: "mpas-system",
+		EventRecorder:       record.NewFakeRecorder(32),
 	}
 
 	_, err = reconciler.Reconcile(context.Background(), ctrl.Request{

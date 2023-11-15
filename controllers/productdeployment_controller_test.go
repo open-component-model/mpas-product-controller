@@ -14,10 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
-	"github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/versions/ocm.software/v3alpha1"
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 
 	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
@@ -38,7 +38,7 @@ func TestProductDeploymentReconciler(t *testing.T) {
 				{
 					Name: "backend",
 					Resource: v1alpha1.ResourceReference{
-						ElementMeta: v3alpha1.ElementMeta{
+						ElementMeta: ocmv1alpha1.ElementMeta{
 							Name:    "manifests",
 							Version: "1.0.0",
 						},
@@ -49,14 +49,14 @@ func TestProductDeploymentReconciler(t *testing.T) {
 						},
 					},
 					Localization: v1alpha1.ResourceReference{
-						ElementMeta: v3alpha1.ElementMeta{
+						ElementMeta: ocmv1alpha1.ElementMeta{
 							Name:    "localization",
 							Version: "1.0.0",
 						},
 					},
 					Configuration: v1alpha1.Configuration{
 						Rules: v1alpha1.ResourceReference{
-							ElementMeta: v3alpha1.ElementMeta{
+							ElementMeta: ocmv1alpha1.ElementMeta{
 								Name:    "configuration",
 								Version: "1.0.0",
 							},
@@ -72,10 +72,12 @@ func TestProductDeploymentReconciler(t *testing.T) {
 	}
 
 	fakeKube := env.FakeKubeClient(WithObjects(deployment), WithStatusSubresource(deployment))
+	recorder := record.NewFakeRecorder(32)
 
 	reconciler := ProductDeploymentReconciler{
-		Client: fakeKube,
-		Scheme: env.scheme,
+		Client:        fakeKube,
+		Scheme:        env.scheme,
+		EventRecorder: recorder,
 	}
 
 	_, err := reconciler.Reconcile(context.Background(), ctrl.Request{
@@ -119,8 +121,9 @@ func TestComponentVersionIsUpdated(t *testing.T) {
 	fakeKube := env.FakeKubeClient(WithObjects(deployment), WithStatusSubresource(deployment.DeepCopy()))
 
 	reconciler := ProductDeploymentReconciler{
-		Client: fakeKube,
-		Scheme: env.scheme,
+		Client:        fakeKube,
+		Scheme:        env.scheme,
+		EventRecorder: record.NewFakeRecorder(32),
 	}
 
 	_, err := reconciler.Reconcile(context.Background(), ctrl.Request{

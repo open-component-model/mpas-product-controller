@@ -10,13 +10,18 @@ import (
 	"fmt"
 	"time"
 
+	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
+	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
+	"github.com/open-component-model/ocm-controller/pkg/event"
+	"github.com/open-component-model/ocm-controller/pkg/status"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,6 +39,7 @@ type ProductDeploymentPipelineReconciler struct {
 	client.Client
 	Scheme              *runtime.Scheme
 	MpasSystemNamespace string
+	EventRecorder       record.EventRecorder
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -76,31 +82,31 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, fmt.Errorf("failed to find the owner: %w", err)
 	}
 
-	objPatcher := patch.NewSerialPatcher(obj, r.Client)
+	patchHelper := patch.NewSerialPatcher(obj, r.Client)
 
 	// Always attempt to patch the object and status after each reconciliation.
 	defer func() {
 		// Patching has not been set up, or the controller errored earlier.
-		if objPatcher == nil {
+		if patchHelper == nil {
 			return
 		}
 
-		// Set status observed generation option if the object is stalled or ready.
-		if conditions.IsStalled(obj) || conditions.IsReady(obj) {
-			obj.Status.ObservedGeneration = obj.Generation
-		}
-
-		if perr := objPatcher.Patch(ctx, obj); perr != nil {
-			err = errors.Join(err, perr)
+		if derr := status.UpdateStatus(ctx, patchHelper, obj, r.EventRecorder, 0); derr != nil {
+			err = errors.Join(err, derr)
 		}
 	}()
+
+	// Starts the progression by setting ReconcilingCondition.
+	// This will be checked in defer.
+	// Should only be deleted on a success.
+	rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason, "reconciliation in progress for resource: %s", obj.Name)
 
 	var snapshotProvider ocmv1alpha1.SnapshotWriter
 	// Create Localization
 	localization, err := r.createOrUpdateLocalization(ctx, obj)
 	if err != nil {
 		err := fmt.Errorf("failed to create localization: %w", err)
-		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.CreateLocalizationFailedReason, err.Error())
+		status.MarkNotReady(r.EventRecorder, obj, mpasv1alpha1.CreateLocalizationFailedReason, err.Error())
 
 		return ctrl.Result{}, err
 	}
@@ -109,7 +115,7 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 
 	project, err := GetProjectFromObjectNamespace(ctx, r.Client, owner, r.MpasSystemNamespace)
 	if err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
+		status.MarkNotReady(r.EventRecorder, obj, mpasv1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to find the project in the namespace: %w", err)
 	}
@@ -118,7 +124,7 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 	configuration, err := r.createOrUpdateConfiguration(ctx, obj, owner, localization, project)
 	if err != nil {
 		err := fmt.Errorf("failed to create configuration: %w", err)
-		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.CreateConfigurationFailedReason, err.Error())
+		status.MarkNotReady(r.EventRecorder, obj, mpasv1alpha1.CreateConfigurationFailedReason, err.Error())
 
 		return ctrl.Result{}, err
 	}
@@ -128,7 +134,10 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 	}
 
 	if snapshotProvider == nil {
-		return ctrl.Result{}, fmt.Errorf("no artifact provider after localization and configuration")
+		err := fmt.Errorf("no artifact provider after localization and configuration")
+		status.MarkNotReady(r.EventRecorder, obj, "NoArtifactAfterLocalizationAndConfiguration", err.Error())
+
+		return ctrl.Result{}, err
 	}
 
 	if snapshotProvider.GetSnapshotName() == "" {
@@ -143,6 +152,7 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 	}
 
 	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
+	event.New(r.EventRecorder, obj, eventv1.EventSeverityInfo, "Reconciliation success", nil)
 
 	return ctrl.Result{}, nil
 }

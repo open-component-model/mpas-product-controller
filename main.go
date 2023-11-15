@@ -121,13 +121,15 @@ func main() {
 		OCMClient:           ocmClient,
 		SnapshotWriter:      snapshotWriter,
 		MpasSystemNamespace: mpasSystemNamespace,
+		EventRecorder:       mgr.GetEventRecorderFor("product-deployment-generator-reconciler"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ProductDeploymentGenerator")
 		os.Exit(1)
 	}
 	if err = (&controllers.ProductDeploymentReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		EventRecorder: mgr.GetEventRecorderFor("product-deployment-reconciler"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ProductDeployment")
 		os.Exit(1)
@@ -136,6 +138,7 @@ func main() {
 		Client:              mgr.GetClient(),
 		Scheme:              mgr.GetScheme(),
 		MpasSystemNamespace: mpasSystemNamespace,
+		EventRecorder:       mgr.GetEventRecorderFor("product-deployment-pipeline-reconciler"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ProductDeploymentPipeline")
 		os.Exit(1)
@@ -157,6 +160,7 @@ func main() {
 		Scheme:              mgr.GetScheme(),
 		MpasSystemNamespace: mpasSystemNamespace,
 		Deployer:            kubeDeployer,
+		EventRecorder:       mgr.GetEventRecorderFor("product-deployment-pipeline-scheduler"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create scheduler", "scheduler", "ProductDeploymentScheduler")
 		os.Exit(1)

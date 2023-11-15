@@ -18,6 +18,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
@@ -25,7 +26,6 @@ import (
 	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	"github.com/open-component-model/ocm-controller/api/v1alpha1"
 	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
-	"github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/versions/ocm.software/v3alpha1"
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 
 	mpasv1alpha1 "github.com/open-component-model/mpas-product-controller/api/v1alpha1"
@@ -93,7 +93,7 @@ func TestProductDeploymentPipelineReconciler(t *testing.T) {
 		Spec: mpasv1alpha1.ProductDeploymentPipelineSpec{
 			ComponentVersionRef: "test-pipeline-component-version",
 			Resource: mpasv1alpha1.ResourceReference{
-				ElementMeta: v3alpha1.ElementMeta{
+				ElementMeta: v1alpha1.ElementMeta{
 					Name:    "backend",
 					Version: "0.0.1",
 				},
@@ -104,7 +104,7 @@ func TestProductDeploymentPipelineReconciler(t *testing.T) {
 				},
 			},
 			Localization: mpasv1alpha1.ResourceReference{
-				ElementMeta: v3alpha1.ElementMeta{
+				ElementMeta: v1alpha1.ElementMeta{
 					Name:    "manifests",
 					Version: "0.0.1",
 				},
@@ -217,6 +217,7 @@ targetNamespace: mpas-system
 		Client:              fakeClient,
 		Scheme:              env.scheme,
 		MpasSystemNamespace: "mpas-system",
+		EventRecorder:       record.NewFakeRecorder(32),
 	}
 
 	_, err = mgr.Reconcile(context.Background(), ctrl.Request{
