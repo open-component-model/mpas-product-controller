@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
@@ -27,7 +26,6 @@ import (
 	goyamlast "github.com/goccy/go-yaml/ast"
 	goyamlparser "github.com/goccy/go-yaml/parser"
 	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
-	"github.com/open-component-model/ocm-controller/pkg/event"
 	"github.com/open-component-model/ocm-controller/pkg/status"
 	markdown "github.com/teekennedy/goldmark-markdown"
 	"github.com/yuin/goldmark"
@@ -205,8 +203,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		}
 
 		if lastReconciledSubscription.Equal(lastReconciledGeneratorVersion) || lastReconciledSubscription.LessThan(lastReconciledGeneratorVersion) {
-			conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
-			event.New(r.EventRecorder, obj, eventv1.EventSeverityInfo, "Reconciliation success", nil)
+			status.MarkReady(r.EventRecorder, obj, "Reconciliation success")
 
 			return ctrl.Result{}, nil
 		}
@@ -416,8 +413,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason, "components applied and generated")
 
 	obj.Status.LastReconciledVersion = component.Version
-	conditions.MarkTrue(obj, meta.ReadyCondition, meta.SucceededReason, "Applied version: %s", component.Version)
-	event.New(r.EventRecorder, obj, eventv1.EventSeverityInfo, "Reconciliation success", nil)
+	status.MarkReady(r.EventRecorder, obj, "Applied version: %s", component.Version)
 
 	return ctrl.Result{}, nil
 }

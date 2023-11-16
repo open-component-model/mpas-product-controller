@@ -38,11 +38,11 @@ require (
 	github.com/fluxcd/source-controller/api v1.1.0
 	github.com/goccy/go-yaml v1.9.5
 	github.com/google/go-github/v52 v52.0.0
-	github.com/open-component-model/git-controller v0.7.0
+	github.com/open-component-model/git-controller v0.10.0
 	github.com/open-component-model/mpas-project-controller v0.2.0
 	github.com/open-component-model/ocm v0.4.0
-	github.com/open-component-model/ocm-controller v0.16.0
-	github.com/open-component-model/replication-controller v0.6.1
+	github.com/open-component-model/ocm-controller v0.16.1-0.20231115142704-81cfce8cc592
+	github.com/open-component-model/replication-controller v0.9.0
 	github.com/open-policy-agent/opa v0.56.0
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/stretchr/testify v1.8.4
