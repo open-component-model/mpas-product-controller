@@ -58,7 +58,7 @@ jobs:
         API_KEY: ${{ secrets.MEND_API_ORG_TOKEN }}
         EMAIL: ${{ secrets.MEND_API_EMAIL }}
       run: |
-       data=$(cat <<EOF
+        data=$(cat <<EOF
         {
             "email": "${EMAIL}",
             "orgToken": "${API_KEY}",
