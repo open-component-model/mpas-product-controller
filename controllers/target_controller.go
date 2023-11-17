@@ -195,45 +195,52 @@ func (r *TargetReconciler) reconcile(ctx context.Context, sp *patch.SerialPatche
 		return ctrl.Result{}, fmt.Errorf("error reconciling namespace: %w", err)
 	}
 
-	// get secrets with the target label if it exists
-	secrets := &corev1.SecretList{}
-	if obj.Spec.SecretsSelector != nil {
-		if err = r.List(ctx, secrets, client.MatchingLabels(obj.Spec.SecretsSelector.MatchLabels), client.InNamespace(ns.Name)); err != nil {
-			conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.SecretRetrievalFailedReason, err.Error())
-			return ctrl.Result{}, fmt.Errorf("error retrieving secrets: %w", err)
+	// Service Account is optional, so only create it if it's specified
+	// in the Target spec. If it's not specified, then the default service
+	// account will be used. We don't delete the service account if it's
+	// no longer specified in the Target spec, because it may be used by
+	// other resources.
+	if obj.Spec.ServiceAccountName != "" {
+		// get secrets with the target label if it exists
+		secrets := &corev1.SecretList{}
+		if obj.Spec.SecretsSelector != nil {
+			if err = r.List(ctx, secrets, client.MatchingLabels(obj.Spec.SecretsSelector.MatchLabels), client.InNamespace(ns.Name)); err != nil {
+				conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.SecretRetrievalFailedReason, err.Error())
+				return ctrl.Result{}, fmt.Errorf("error retrieving secrets: %w", err)
+			}
+
+			if len(secrets.Items) == 0 {
+				conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.SecretRetrievalFailedReason, "no secrets found")
+				return ctrl.Result{}, fmt.Errorf("no secrets found")
+			}
 		}
 
-		if len(secrets.Items) == 0 {
-			conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.SecretRetrievalFailedReason, "no secrets found")
-			return ctrl.Result{}, fmt.Errorf("no secrets found")
+		sa := &corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      obj.Spec.ServiceAccountName,
+				Namespace: kubernetesAccess.TargetNamespace,
+			},
 		}
-	}
 
-	sa := &corev1.ServiceAccount{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      obj.Spec.ServiceAccountName,
-			Namespace: kubernetesAccess.TargetNamespace,
-		},
-	}
+		// if the secrets exist, add it to the service account
+		var imagePullSecrets []corev1.LocalObjectReference
+		for _, secret := range secrets.Items {
+			imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{
+				Name: secret.Name,
+			})
+		}
 
-	// if the secrets exist, add it to the service account
-	var imagePullSecrets []corev1.LocalObjectReference
-	for _, secret := range secrets.Items {
-		imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{
-			Name: secret.Name,
+		_, err = controllerutil.CreateOrUpdate(ctx, r.Client, sa, func() error {
+			if !equalImagePullSecretSlices(sa.ImagePullSecrets, imagePullSecrets) {
+				sa.ImagePullSecrets = imagePullSecrets
+			}
+			return nil
 		})
-	}
 
-	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, sa, func() error {
-		if !equalImagePullSecretSlices(sa.ImagePullSecrets, imagePullSecrets) {
-			sa.ImagePullSecrets = imagePullSecrets
+		if err != nil {
+			conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ServiceAccountCreateOrUpdateFailedReason, err.Error())
+			return ctrl.Result{}, fmt.Errorf("error reconciling service account: %w", err)
 		}
-		return nil
-	})
-
-	if err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, v1alpha1.ServiceAccountCreateOrUpdateFailedReason, err.Error())
-		return ctrl.Result{}, fmt.Errorf("error reconciling service account: %w", err)
 	}
 
 	// Remove any stale Ready condition, most likely False, set above. Its value

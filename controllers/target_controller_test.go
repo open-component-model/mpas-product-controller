@@ -27,11 +27,25 @@ func TestTargetReconciler_Reconcile(t *testing.T) {
 		name         string
 		secretLabels map[string]string
 		secretName   string
+		sa           bool
 		wantErr      assert.ErrorAssertionFunc
 		wantResult   assert.ValueAssertionFunc
 	}{
 		{
+			name: "Target Ready with no service account",
+			wantResult: func(t assert.TestingT, a any, b ...any) bool {
+				target, ok := a.(*v1alpha1.Target)
+				if !ok {
+					assert.Fail(t, "a is not a *v1alpha1.Target")
+				}
+
+				return equalConditions(target.Status.Conditions,
+					[]metav1.Condition{*conditions.TrueCondition(meta.ReadyCondition, meta.SucceededReason, "Target is ready")})
+			},
+		},
+		{
 			name: "Target Ready with no secret",
+			sa:   true,
 			wantResult: func(t assert.TestingT, a any, b ...any) bool {
 				target, ok := a.(*v1alpha1.Target)
 				if !ok {
@@ -44,6 +58,7 @@ func TestTargetReconciler_Reconcile(t *testing.T) {
 		},
 		{
 			name: "Target Ready with a secret",
+			sa:   true,
 			secretLabels: map[string]string{
 				"test-label": "test-value",
 			},
@@ -72,8 +87,11 @@ func TestTargetReconciler_Reconcile(t *testing.T) {
 					Access: &apiextensionsv1.JSON{
 						Raw: []byte(`{"targetNamespace":"test-namespace"}`),
 					},
-					ServiceAccountName: "test-service-account",
 				},
+			}
+
+			if tt.sa {
+				target.Spec.ServiceAccountName = "test-service-account"
 			}
 
 			secret := &corev1.Secret{
