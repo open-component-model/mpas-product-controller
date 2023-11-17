@@ -131,6 +131,7 @@ func (r *ProductDeploymentPipelineScheduler) Reconcile(ctx context.Context, req 
 
 	conditions.MarkTrue(obj, mpasv1alpha1.DeployedCondition, meta.SucceededReason, "Successfully deployed")
 	event.New(r.EventRecorder, obj, eventv1.EventSeverityInfo, "Reconciliation success", nil)
+	conditions.Delete(obj, meta.ReconcilingCondition)
 
 	return ctrl.Result{}, nil
 }
