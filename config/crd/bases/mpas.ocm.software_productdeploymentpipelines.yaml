@@ -41,6 +41,8 @@ spec:
                 description: ComponentVersionRef is the name of the generated component
                   version object.
                 type: string
+              configMapRef:
+                type: string
               configuration:
                 description: Configuration defines a list of rules to follow and an
                   optional values file.

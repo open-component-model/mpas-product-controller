@@ -22,6 +22,8 @@ type ProductDeploymentPipelineSpec struct {
 	Configuration Configuration `json:"configuration"`
 	// +required
 	TargetRole TargetRole `json:"targetRole"`
+	// +required
+	ConfigMapRef string `json:"configMapRef,omitempty"`
 
 	//+optional
 	TargetRef meta.NamespacedObjectReference `json:"targetRef"`

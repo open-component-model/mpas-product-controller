@@ -57,6 +57,10 @@ spec:
                 - registry
                 - version
                 type: object
+              interval:
+                description: Interval is the reconciliation interval, i.e. at what
+                  interval shall a reconciliation happen.
+                type: string
               pipelines:
                 items:
                   description: Pipeline defines a set of pipeline objects.
@@ -282,8 +286,11 @@ spec:
                 type: array
               serviceAccountName:
                 type: string
+              values:
+                x-kubernetes-preserve-unknown-fields: true
             required:
             - component
+            - interval
             - pipelines
             - serviceAccountName
             type: object

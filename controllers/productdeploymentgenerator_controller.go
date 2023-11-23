@@ -31,6 +31,7 @@ import (
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -125,7 +126,6 @@ func (r *ProductDeploymentGeneratorReconciler) SetupWithManager(mgr ctrl.Manager
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=snapshots/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=snapshots/finalizers,verbs=update
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=syncs,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -286,7 +286,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 	productFolder := filepath.Join(dir, obj.Name)
 
-	productDeployment, err := r.createProductDeployment(ctx, obj, *prodDesc, component, productFolder, cv, project)
+	productDeployment, values, err := r.createProductDeployment(ctx, obj, *prodDesc, component, productFolder, cv, project)
 	if err != nil {
 		if errors.Is(err, unschedulableError) {
 			status.MarkNotReady(r.EventRecorder, obj, v1alpha1.ProductPipelineSchedulingFailedReason, err.Error())
@@ -369,6 +369,49 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{}, fmt.Errorf("failed to create sync request: %w", err)
 	}
 
+	// Create the Validation Object.
+	validationSchema, err := values.Json()
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.SchemaGenerationFailedReason, err.Error())
+		return ctrl.Result{}, fmt.Errorf("failed to create sync request: %w", err)
+	}
+
+	validation := &v1alpha1.Validation{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      obj.Name + "-validation-" + hashedVersion,
+			Namespace: obj.Namespace,
+			Annotations: map[string]string{
+				componentVersionAnnotationKey: component.Version,
+				componentNameAnnotationKey:    component.Name,
+			},
+		},
+		Spec: v1alpha1.ValidationSpec{
+			Schema:             []byte(validationSchema),
+			ServiceAccountName: obj.Spec.ServiceAccountName,
+			Interval:           metav1.Duration{Duration: 30 * time.Second},
+			SyncRef: meta.NamespacedObjectReference{
+				Name:      sync.Name,
+				Namespace: sync.Namespace,
+			},
+		},
+	}
+
+	if _, err := ctrl.CreateOrUpdate(ctx, r.Client, validation, func() error {
+		if validation.ObjectMeta.CreationTimestamp.IsZero() {
+			if err := controllerutil.SetOwnerReference(obj, validation, r.Scheme); err != nil {
+				return fmt.Errorf("failed to set owner to validation object: %w", err)
+			}
+		}
+
+		return nil
+	}); err != nil {
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.CreateValidationFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to create validation request: %w", err)
+	}
+
+	rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason, "components applied and generated")
+
 	obj.Status.LastReconciledVersion = component.Version
 	status.MarkReady(r.EventRecorder, obj, "Applied version: %s", component.Version)
 
@@ -383,7 +426,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	dir string,
 	cv ocm.ComponentVersionAccess,
 	project *projectv1.Project,
-) (*v1alpha1.ProductDeployment, error) {
+) (*v1alpha1.ProductDeployment, *cue.File, error) {
 	logger := log.FromContext(ctx)
 
 	productDeployment := &v1alpha1.ProductDeployment{
@@ -400,6 +443,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	spec := v1alpha1.ProductDeploymentSpec{
 		Component:          component,
 		ServiceAccountName: obj.Spec.ServiceAccountName,
+		Interval:           obj.Spec.Interval,
 	}
 
 	var readme []byte
@@ -408,7 +452,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	for _, p := range prodDesc.Spec.Pipelines {
 		pipe, file, err := r.createProductPipeline(ctx, prodDesc, p, cv)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create product pipeline: %w", err)
+			return nil, nil, fmt.Errorf("failed to create product pipeline: %w", err)
 		}
 
 		spec.Pipelines = append(spec.Pipelines, pipe)
@@ -421,7 +465,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 
 		parsed, err := r.increaseHeaders([]byte(file.Comments()))
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse instructions: %w", err)
+			return nil, nil, fmt.Errorf("failed to parse instructions: %w", err)
 		}
 
 		readme = append(readme, parsed...)
@@ -429,7 +473,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	}
 
 	if len(schemaFiles) == 0 {
-		return nil, fmt.Errorf("failed to create product pipeline, a schema file is required")
+		return nil, nil, fmt.Errorf("failed to create product pipeline, a schema file is required")
 	}
 
 	var (
@@ -439,7 +483,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	if len(schemaFiles) > 1 {
 		schema, err = schemaFiles[0].Unify(schemaFiles[1:])
 		if err != nil {
-			return nil, fmt.Errorf("failed to unify schemas: %w", err)
+			return nil, nil, fmt.Errorf("failed to unify schemas: %w", err)
 		}
 	} else {
 		schema = schemaFiles[0]
@@ -447,7 +491,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 
 	existingConfigFile, err := r.fetchExistingValues(ctx, obj.Name, project)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch ignored values: %w", err)
+		return nil, nil, fmt.Errorf("failed to fetch ignored values: %w", err)
 	}
 
 	values := schema
@@ -457,7 +501,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	} else {
 		config, err = existingConfigFile.Merge(schema)
 		if err != nil {
-			return nil, fmt.Errorf("failed to merge existing values with schema: %w", err)
+			return nil, nil, fmt.Errorf("failed to merge existing values with schema: %w", err)
 		}
 		// Evaluate the configuration file to get the final values.
 		// we do this here to make sure that the values file does not contain any
@@ -467,83 +511,48 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 
 	err = config.Sanitize()
 	if err != nil {
-		return nil, fmt.Errorf("failed to sanitize values: %w", err)
+		return nil, nil, fmt.Errorf("failed to sanitize values: %w", err)
 	}
 
 	err = config.Validate(schema)
 	if err != nil {
-		return nil, fmt.Errorf("failed to validate configuration values file: %w", err)
+		return nil, nil, fmt.Errorf("failed to validate configuration values file: %w", err)
 	}
 
 	if existingConfigFile != nil {
 		values, err = config.Unify([]*cue.File{schema})
 		if err != nil {
-			return nil, fmt.Errorf("failed to unify values with schema: %w", err)
+			return nil, nil, fmt.Errorf("failed to unify values with schema: %w", err)
 		}
 	}
 
 	configBytes, err := config.Format()
 	if err != nil {
-		return nil, fmt.Errorf("failed to format values: %w", err)
+		return nil, nil, fmt.Errorf("failed to format values: %w", err)
 	}
 
 	if err := os.WriteFile(filepath.Join(dir, "config.cue"), configBytes, 0o644); err != nil {
-		return nil, fmt.Errorf("failed to write configuration values file: %w", err)
+		return nil, nil, fmt.Errorf("failed to write configuration values file: %w", err)
 	}
 
 	if err := os.WriteFile(filepath.Join(dir, "README.md"), readme, 0o644); err != nil {
-		return nil, fmt.Errorf("failed to write readme file: %w", err)
+		return nil, nil, fmt.Errorf("failed to write readme file: %w", err)
 	}
 
 	// also create a configmap with the values in yaml format
-	valuesYaml, err := values.Yaml()
+	valuesJson, err := values.Json()
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert values to yaml: %w", err)
-	}
-	err = r.generateConfigMap(ctx, obj, string(valuesYaml))
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate configmap: %w", err)
+		return nil, nil, fmt.Errorf("failed to convert values to json: %w", err)
 	}
 
+	spec.Values = v1.JSON{
+		Raw: []byte(valuesJson),
+	}
 	productDeployment.Spec = spec
 
 	logger.Info("successfully generated product deployment", "productDeployment", klog.KObj(productDeployment))
 
-	return productDeployment, nil
-}
-
-func (r *ProductDeploymentGeneratorReconciler) generateConfigMap(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator, values string) error {
-
-	configMap := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			// TODO@souleb: The config name should be  a hash of the values
-			// and should gc with a max of configmap and by timestamp
-			Name:      obj.Name + "-values",
-			Namespace: obj.Namespace,
-		},
-	}
-
-	if _, err := ctrl.CreateOrUpdate(ctx, r.Client, configMap, func() error {
-		if configMap.ObjectMeta.CreationTimestamp.IsZero() {
-			if err := controllerutil.SetOwnerReference(obj, configMap, r.Scheme); err != nil {
-				return fmt.Errorf("failed to set owner to sync object: %w", err)
-			}
-		}
-
-		if configMap.Data == nil || len(configMap.Data) == 0 {
-			configMap.Data = map[string]string{
-				"values.yaml": values,
-			}
-		}
-
-		if v, ok := configMap.Data["values.yaml"]; !ok || v != values {
-			configMap.Data["values.yaml"] = values
-		}
-		return nil
-	}); err != nil {
-		return fmt.Errorf("failed to create configmap: %w", err)
-	}
-	return nil
+	return productDeployment, values, nil
 }
 
 // createProductPipeline takes a pipeline description and builds up all the Kubernetes objects that are needed

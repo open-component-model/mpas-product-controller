@@ -26,7 +26,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
 	mpasv1alpha1 "github.com/open-component-model/mpas-product-controller/api/v1alpha1"
 	mpasocm "github.com/open-component-model/mpas-product-controller/pkg/ocm"
 	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
@@ -188,11 +187,6 @@ func (r *ProductDeploymentPipelineReconciler) createOrUpdateConfiguration(
 		}
 	}
 
-	pdLabel, ok := obj.GetLabels()[v1alpha1.ProductDeploymentOwnerLabelKey]
-	if !ok {
-		return nil, fmt.Errorf("failed to find product deployment label")
-	}
-
 	configuration := &ocmv1alpha1.Configuration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      obj.Name + "-configuration",
@@ -212,9 +206,10 @@ func (r *ProductDeploymentPipelineReconciler) createOrUpdateConfiguration(
 			ValuesFrom: &ocmv1alpha1.ValuesSource{
 				ConfigMapSource: &ocmv1alpha1.ConfigMapSource{
 					SourceRef: meta.LocalObjectReference{
-						Name: pdLabel + "-values",
+						Name: obj.Spec.ConfigMapRef,
 					},
-					Key:     "values.yaml",
+					Key: "values.yaml",
+					// TODO: This means that's its a must have in the config.cue file
 					SubPath: obj.Name,
 				},
 			},

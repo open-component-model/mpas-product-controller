@@ -44,6 +44,9 @@ const (
 	// CreateSyncFailedReason is used when we fail to create a git-controller.Sync object in the cluster.
 	CreateSyncFailedReason = "CreateSyncFailed"
 
+	// CreateValidationFailedReason is used when we fail to create a Validation object in the cluster.
+	CreateValidationFailedReason = "CreateValidationFailed"
+
 	// CreateSnapshotFailedReason is used when we fail to create an ocm-controller.Snapshot object in the cluster.
 	CreateSnapshotFailedReason = "CreateSnapshotFailed"
 
@@ -68,6 +71,12 @@ const (
 	// PipelineTargetSelectionFailedReason is used when we fail to select a target environment for the pipeline.
 	PipelineTargetSelectionFailedReason = "PipelineTargetSelectionFailed"
 
+	// ValidationFailedReason is used when the validation of a resource failed.
+	ValidationFailedReason = "ValidationFailed"
+
+	// SchemaGenerationFailedReason is used when we couldn't generate the schema.
+	SchemaGenerationFailedReason = "SchemaGenerationFailed"
+
 	// GitRepositoryCleanUpFailedReason is used when we couldn't delete the GitRepository.
 	GitRepositoryCleanUpFailedReason = "GitRepositoryCleanUpFailed"
 
@@ -82,6 +91,12 @@ const (
 
 	// AccessInvalidReason indicates that the access credentials or target are invalid.
 	AccessInvalidReason = "AccessInvalid"
+
+	// CreateConfigMapFailedReason indicates that the config map could not be created.
+	CreateConfigMapFailedReason = "CreateConfigMapFailed"
+
+	// ValuesRetrievalFailedReason indicates that the values file could not be retrieved.
+	ValuesRetrievalFailedReason = "ValuesRetrievalFailed"
 )
 
 const (
