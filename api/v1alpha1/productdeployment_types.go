@@ -25,6 +25,9 @@ type ProductDeploymentSpec struct {
 	Pipelines []Pipeline `json:"pipelines"`
 	// +required
 	ServiceAccountName string `json:"serviceAccountName"`
+	// Verify defines signatures for the given component.
+	// +optional
+	Verify []replicationv1.Signature `json:"verify,omitempty"`
 }
 
 // ProductDeploymentStatus defines the observed state of ProductDeployment.
@@ -70,7 +73,7 @@ type TargetRole struct {
 // Pipeline defines a set of pipeline objects.
 type Pipeline struct {
 	Name          string            `json:"name"`
-	Resource      ResourceReference `json:"resource"`
+	Source        ResourceReference `json:"source"`
 	Localization  ResourceReference `json:"localization"`
 	Configuration Configuration     `json:"configuration"`
 	Validation    ResourceReference `json:"validation"`

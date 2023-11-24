@@ -165,7 +165,7 @@ spec:
                       type: object
                     name:
                       type: string
-                    resource:
+                    source:
                       properties:
                         extraIdentity:
                           additionalProperties:
@@ -323,13 +323,47 @@ spec:
                   - configuration
                   - localization
                   - name
-                  - resource
+                  - source
                   - targetRole
                   - validation
                   type: object
                 type: array
               serviceAccountName:
                 type: string
+              verify:
+                description: Verify defines signatures for the given component.
+                items:
+                  description: Signature defines the details of a signature to use
+                    for verification.
+                  properties:
+                    name:
+                      description: Name specifies the name of the signature. An OCM
+                        component may have multiple signatures.
+                      type: string
+                    publicKey:
+                      description: PublicKey provides a reference to a Kubernetes
+                        Secret that contains a public key which will be used to validate
+                        the named signature.
+                      properties:
+                        secretRef:
+                          description: LocalObjectReference contains enough information
+                            to let you locate the referenced object inside the same
+                            namespace.
+                          properties:
+                            name:
+                              description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                TODO: Add other useful fields. apiVersion, kind, uid?'
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
+                      required:
+                      - secretRef
+                      type: object
+                  required:
+                  - name
+                  - publicKey
+                  type: object
+                type: array
             required:
             - component
             - pipelines

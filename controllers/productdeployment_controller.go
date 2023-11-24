@@ -31,7 +31,8 @@ import (
 )
 
 const (
-	controllerMetadataKey = ".metadata.controller"
+	controllerMetadataKey         = ".metadata.controller"
+	mpasVerificationSignatureName = "mpas-verified"
 )
 
 // ProductDeploymentReconciler reconciles a ProductDeployment object
@@ -162,7 +163,7 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 				},
 			},
 			Spec: v1alpha1.ProductDeploymentPipelineSpec{
-				Resource:            pipeline.Resource,
+				Resource:            pipeline.Source,
 				Localization:        pipeline.Localization,
 				Configuration:       pipeline.Configuration,
 				TargetRole:          pipeline.TargetRole,
@@ -196,6 +197,14 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 }
 
 func (r *ProductDeploymentReconciler) createOrUpdateComponentVersion(ctx context.Context, obj *v1alpha1.ProductDeployment) error {
+	signature := make([]ocmv1alpha1.Signature, 0, len(obj.Spec.Verify))
+	for _, s := range obj.Spec.Verify {
+		signature = append(signature, ocmv1alpha1.Signature{
+			Name:      s.Name,
+			PublicKey: ocmv1alpha1.SecretRef{SecretRef: s.PublicKey.SecretRef},
+		})
+	}
+
 	cv := &ocmv1alpha1.ComponentVersion{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.generateComponentVersionName(obj),
@@ -208,7 +217,7 @@ func (r *ProductDeploymentReconciler) createOrUpdateComponentVersion(ctx context
 			Repository: ocmv1alpha1.Repository{
 				URL: obj.Spec.Component.Registry.URL,
 			},
-			Verify: nil, // TODO: think about this
+			Verify: signature,
 			References: ocmv1alpha1.ReferencesConfig{
 				Expand: true,
 			},

@@ -37,7 +37,7 @@ func TestProductDeploymentReconciler(t *testing.T) {
 			Pipelines: []v1alpha1.Pipeline{
 				{
 					Name: "backend",
-					Resource: v1alpha1.ResourceReference{
+					Source: v1alpha1.ResourceReference{
 						ElementMeta: ocmv1alpha1.ElementMeta{
 							Name:    "manifests",
 							Version: "1.0.0",

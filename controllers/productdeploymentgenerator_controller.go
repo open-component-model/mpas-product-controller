@@ -292,7 +292,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 	validationRules := make([]v1alpha1.ValidationData, 0)
 
-	productDeployment, err := r.createProductDeployment(ctx, obj, *prodDesc, component, productFolder, cv, &validationRules, project)
+	productDeployment, err := r.createProductDeployment(ctx, obj, *subscription, *prodDesc, component, productFolder, cv, &validationRules, project)
 	if err != nil {
 		if errors.Is(err, unschedulableError) {
 			status.MarkNotReady(r.EventRecorder, obj, v1alpha1.ProductPipelineSchedulingFailedReason, err.Error())
@@ -421,6 +421,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	ctx context.Context,
 	obj *v1alpha1.ProductDeploymentGenerator,
+	sub replicationv1.ComponentSubscription,
 	prodDesc v1alpha1.ProductDescription,
 	component replicationv1.Component,
 	dir string,
@@ -444,6 +445,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	spec := v1alpha1.ProductDeploymentSpec{
 		Component:          component,
 		ServiceAccountName: obj.Spec.ServiceAccountName,
+		Verify:             sub.Spec.Verify,
 	}
 
 	values := make(map[string]map[string]any)
@@ -587,7 +589,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(
 		Configuration: v1alpha1.Configuration{
 			Rules: p.Configuration.Rules,
 		},
-		Resource:   p.Source,
+		Source:     p.Source,
 		TargetRole: *targetRole,
 		Validation: p.Validation,
 	}, instructions, nil

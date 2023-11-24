@@ -23,7 +23,7 @@ spec:
       - name: backend
       version: 1.0.0
     name: backend
-    resource:
+    source:
       name: manifests
       referencePath:
       - name: backend
