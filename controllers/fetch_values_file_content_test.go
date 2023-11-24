@@ -39,7 +39,6 @@ frontend:n {
 	require.NoError(t, err)
 
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("values for file does exist")
 		fmt.Fprint(w, string(values))
 	}))
 	defer testServer.Close()

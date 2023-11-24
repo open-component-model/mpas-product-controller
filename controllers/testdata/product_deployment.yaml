@@ -10,6 +10,7 @@ spec:
     registry:
       url: https://github.com/open-component-model/source
     version: v0.0.1
+  interval: 1s
   pipelines:
   - configuration:
       rules:
@@ -33,5 +34,6 @@ spec:
         matchLabels:
           target.mpas.ocm.software/ingress-enabled: "true"
       type: kubernetes
+  schema: Ly8gICMgQ29uZmlndXJhdGlvbiBJbnN0cnVjdGlvbnMKLy8KLy8gIFRoaXMgaXMgdGhlIGFwaSBzZXJ2aWNlIG9mIHRoZSBwb2RpbmZvIG1pY3Jvc2VydmljZXMgYXBwbGljYXRpb24uCi8vCi8vICBUaGUgZm9sbG93aW5nIHBhcmFtZXRlcnMgYXJlIGF2YWlsYWJsZSBmb3IgY29uZmlndXJhdGlvbjoKLy8KLy8gIHwgUGFyYW1ldGVyIHwgVHlwZSAgICB8IERlZmF1bHQgICAgICAgICAgfCBEZXNjcmlwdGlvbiAgICAgICAgICAgICAgICAgICAgICAgICAgICB8Ci8vICB8LS0tLS0tLS0tLS18LS0tLS0tLS0tfC0tLS0tLS0tLS0tLS0tLS0tLXwtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tfAovLyAgfCByZXBsaWNhcyAgfCBpbnRlZ2VyIHwgMiAgICAgICAgICAgICAgICB8IE51bWJlciBvZiByZXBsaWNhcyBmb3IgdGhlIGFwcGxpY2F0aW9uIHwKLy8gIHwgY2FjaGVBZGRyIHwgc3RyaW5nICB8IHRjcDovL3JlZGlzOjYzNzkgfCBBZGRyZXNzIG9mIHRoZSBjYWNoZSBzZXJ2ZXIgICAgICAgICAgICB8CiNTY2hlbWFWZXJzaW9uOiAidjEuMC4wIgpkZXBsb3ltZW50OiB7CglyZXBsaWNhczogIDIKCWNhY2hlQWRkcjogInRjcDovL3JlZGlzOjYzNzkiCn0K
   serviceAccountName: test-service-account
 status: {}

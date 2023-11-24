@@ -465,7 +465,7 @@ func TestProductDeploymentGeneratorReconcilerWithValueFile(t *testing.T) {
 	assert.Equal(t, string(modifiedReadme), fakeWriter.readmeContent)
 	assert.Equal(t, string(mergedConfig), fakeWriter.valuesContent)
 
-	productDeployment, err := os.ReadFile(filepath.Join("testdata", "product_deployment.yaml"))
+	productDeployment, err := os.ReadFile(filepath.Join("testdata", "product_deployment_merged_values.yaml"))
 	require.NoError(t, err)
 
 	assert.Equal(t, string(productDeployment), fakeWriter.productDeploymentContent)

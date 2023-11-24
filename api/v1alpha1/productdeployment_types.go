@@ -10,7 +10,6 @@ import (
 	ocmv1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -31,8 +30,8 @@ type ProductDeploymentSpec struct {
 	// Interval is the reconciliation interval, i.e. at what interval shall a reconciliation happen.
 	// +required
 	Interval metav1.Duration `json:"interval"`
-	// +optional
-	Values v1.JSON `json:"values,omitempty"`
+	// +required
+	Schema []byte `json:"schema,omitempty"`
 }
 
 // ProductDeploymentStatus defines the observed state of ProductDeployment.

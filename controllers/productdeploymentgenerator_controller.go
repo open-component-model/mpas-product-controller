@@ -31,7 +31,6 @@ import (
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -126,6 +125,7 @@ func (r *ProductDeploymentGeneratorReconciler) SetupWithManager(mgr ctrl.Manager
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=snapshots/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=snapshots/finalizers,verbs=update
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=syncs,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=delivery.ocm.software,resources=validations,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -370,7 +370,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	}
 
 	// Create the Validation Object.
-	validationSchema, err := values.Json()
+	validationSchema, err := values.Format()
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.SchemaGenerationFailedReason, err.Error())
 		return ctrl.Result{}, fmt.Errorf("failed to create sync request: %w", err)
@@ -386,7 +386,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 			},
 		},
 		Spec: v1alpha1.ValidationSpec{
-			Schema:             []byte(validationSchema),
+			Schema:             validationSchema,
 			ServiceAccountName: obj.Spec.ServiceAccountName,
 			Interval:           metav1.Duration{Duration: 30 * time.Second},
 			SyncRef: meta.NamespacedObjectReference{
@@ -489,9 +489,9 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 		schema = schemaFiles[0]
 	}
 
-	existingConfigFile, err := r.fetchExistingValues(ctx, obj.Name, project)
+	existingConfigFile, err := fetchExistingConfigFile(ctx, r.Client, obj.Name, project)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to fetch ignored values: %w", err)
+		return nil, nil, fmt.Errorf("failed to fetch existing config file: %w", err)
 	}
 
 	values := schema
@@ -539,20 +539,17 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 		return nil, nil, fmt.Errorf("failed to write readme file: %w", err)
 	}
 
-	// also create a configmap with the values in yaml format
-	valuesJson, err := values.Json()
+	schemaBytes, err := schema.Format()
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to convert values to json: %w", err)
+		return nil, nil, fmt.Errorf("failed to format values: %w", err)
 	}
 
-	spec.Values = v1.JSON{
-		Raw: []byte(valuesJson),
-	}
+	spec.Schema = schemaBytes
 	productDeployment.Spec = spec
 
 	logger.Info("successfully generated product deployment", "productDeployment", klog.KObj(productDeployment))
 
-	return productDeployment, values, nil
+	return productDeployment, schema, nil
 }
 
 // createProductPipeline takes a pipeline description and builds up all the Kubernetes objects that are needed
@@ -721,8 +718,8 @@ func (r *ProductDeploymentGeneratorReconciler) hashComponentVersion(version stri
 	return hex.EncodeToString(h.Sum(nil))[:8]
 }
 
-// fetchExistingValues gathers existing values.yaml values. If it doesn't exist it returns an empty file and no error.
-func (r *ProductDeploymentGeneratorReconciler) fetchExistingValues(ctx context.Context, productName string, project *projectv1.Project) (*cue.File, error) {
+// fetchExistingConfigFile gathers existing config.cue values. If it doesn't exist it returns an empty file and no error.
+func fetchExistingConfigFile(ctx context.Context, r client.Client, productName string, project *projectv1.Project) (*cue.File, error) {
 	repoName, repoNamespace, err := FetchGitRepositoryFromProjectInventory(project)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch GitRepository from project: %w", err)

@@ -284,10 +284,11 @@ spec:
                   - targetRole
                   type: object
                 type: array
+              schema:
+                format: byte
+                type: string
               serviceAccountName:
                 type: string
-              values:
-                x-kubernetes-preserve-unknown-fields: true
             required:
             - component
             - interval

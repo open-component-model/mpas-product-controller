@@ -148,6 +148,18 @@ rules:
   - update
   - watch
 - apiGroups:
+  - delivery.ocm.software
+  resources:
+  - validations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - mpas.ocm.software
   resources:
   - productdeploymentgenerators
