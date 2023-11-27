@@ -245,8 +245,10 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{}, fmt.Errorf("failed to authenticate using service account: %w", err)
 	}
 	defer func() {
-		if cerr := cv.Close(); cerr != nil {
-			err = errors.Join(err, cerr)
+		if cv != nil {
+			if cerr := cv.Close(); cerr != nil {
+				err = errors.Join(err, cerr)
+			}
 		}
 	}()
 
@@ -254,6 +256,13 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 	content, err := r.OCMClient.GetProductDescription(ctx, octx, cv)
 	if err != nil {
+		if errors.Is(err, mpasocm.ErrNoProductDescription) {
+			status.MarkAsStalled(r.EventRecorder, obj, v1alpha1.NoProductDescriptionForComponentReason, fmt.Sprintf("component %s doesn't have a product description", component.Name))
+
+			// Stop processing the component as it isn't MPAS compliant.
+			return ctrl.Result{}, nil
+		}
+
 		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.ProductDescriptionGetFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to get product description data: %w", err)

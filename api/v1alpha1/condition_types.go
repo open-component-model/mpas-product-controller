@@ -32,6 +32,9 @@ const (
 	// ProductDescriptionGetFailedReason happens when we don't find the product description or fail to process it.
 	ProductDescriptionGetFailedReason = "ProductDescriptionGetFailed"
 
+	// NoProductDescriptionForComponentReason happens if we don't find a product description for a component.
+	NoProductDescriptionForComponentReason = "NoProductDescriptionForComponent"
+
 	// TemporaryFolderGenerationFailedReason happens when we don't find the product description or fail to process it.
 	TemporaryFolderGenerationFailedReason = "TemporaryFolderGenerationFailed"
 

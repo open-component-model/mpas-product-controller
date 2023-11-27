@@ -30,10 +30,7 @@ import (
 	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 )
 
-const (
-	controllerMetadataKey         = ".metadata.controller"
-	mpasVerificationSignatureName = "mpas-verified"
-)
+const controllerMetadataKey = ".metadata.controller"
 
 // ProductDeploymentReconciler reconciles a ProductDeployment object
 type ProductDeploymentReconciler struct {

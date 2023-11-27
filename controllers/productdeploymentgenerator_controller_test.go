@@ -14,6 +14,7 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	v1 "github.com/fluxcd/source-controller/api/v1"
 	"github.com/fluxcd/source-controller/api/v1beta2"
+	ocm2 "github.com/open-component-model/mpas-product-controller/pkg/ocm"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/client-go/tools/record"
 
@@ -255,6 +256,127 @@ func TestProductDeploymentGeneratorReconciler(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, string(productDeployment), fakeWriter.productDeploymentContent)
+}
+
+func TestProductDeploymentGeneratorWithoutDescriptionReconciler(t *testing.T) {
+	testNamespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-namespace",
+			Labels: map[string]string{
+				projectv1.ProjectKey: "project",
+			},
+		},
+	}
+
+	mpasNamespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "mpas-system",
+		},
+	}
+
+	project := &projectv1.Project{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "project",
+			Namespace: mpasNamespace.Name,
+		},
+		Spec: projectv1.ProjectSpec{
+			Git: alpha1.RepositorySpec{
+				CommitTemplate: &gitv1alpha1.CommitTemplate{
+					Email:   "email@email.com",
+					Message: "message",
+					Name:    "name",
+				},
+			},
+		},
+		Status: projectv1.ProjectStatus{
+			RepositoryRef: &meta.NamespacedObjectReference{
+				Name:      "test-repository",
+				Namespace: "mpas-system",
+			},
+			Inventory: &projectv1.ResourceInventory{
+				Entries: []projectv1.ResourceRef{
+					{
+						// in the format '<namespace>_<name>_<group>_<kind>'.
+						ID:      testNamespace.Name + "_repo_v1alpha1_GitRepository",
+						Version: "v0.0.1",
+					},
+				},
+			},
+		},
+	}
+	conditions.MarkTrue(project, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
+
+	serviceAccount := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-service-account",
+			Namespace: testNamespace.Name,
+		},
+	}
+	subscription := &v1alpha13.ComponentSubscription{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-subscription",
+			Namespace: testNamespace.Name,
+		},
+		Spec: v1alpha13.ComponentSubscriptionSpec{
+			Interval: metav1.Duration{Duration: time.Second},
+			Source: v1alpha13.OCMRepository{
+				URL: "https://github.com/open-component-model/source",
+			},
+			Component:          "github.com/open-component-model/mpas",
+			ServiceAccountName: serviceAccount.Name,
+			Semver:             "v0.0.1",
+		},
+		Status: v1alpha13.ComponentSubscriptionStatus{
+			LastAttemptedVersion:    "v0.0.1",
+			ObservedGeneration:      0,
+			LastAppliedVersion:      "v0.0.1",
+			ReplicatedRepositoryURL: "https://github.com/open-component-model/source",
+		},
+	}
+	conditions.MarkTrue(subscription, meta.ReadyCondition, meta.SucceededReason, "Reconciliation success")
+
+	obj := &v1alpha1.ProductDeploymentGenerator{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-product-deployment-generator",
+			Namespace: testNamespace.Name,
+		},
+		Spec: v1alpha1.ProductDeploymentGeneratorSpec{
+			Interval: metav1.Duration{Duration: time.Second},
+			SubscriptionRef: meta.NamespacedObjectReference{
+				Name:      subscription.Name,
+				Namespace: subscription.Namespace,
+			},
+			ServiceAccountName: serviceAccount.Name,
+		},
+	}
+
+	fakeOcmClient := &fakes.MockOCM{}
+	fakeOcmClient.GetComponentVersionReturnsForName("test-component", nil, nil)
+	fakeOcmClient.GetProductDescriptionReturns(nil, ocm2.ErrNoProductDescription)
+	fakeClient := env.FakeKubeClient(WithObjects(mpasNamespace, testNamespace, project, obj, subscription, serviceAccount),
+		WithStatusSubresource(project, obj, subscription))
+	fakeWriter := &mockSnapshotWriter{}
+
+	reconciler := &ProductDeploymentGeneratorReconciler{
+		Client:              fakeClient,
+		Scheme:              env.scheme,
+		OCMClient:           fakeOcmClient,
+		SnapshotWriter:      fakeWriter,
+		MpasSystemNamespace: "mpas-system",
+		EventRecorder:       record.NewFakeRecorder(32),
+	}
+
+	_, err := reconciler.Reconcile(context.Background(), ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      obj.Name,
+			Namespace: obj.Namespace,
+		},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, fakeClient.Get(context.Background(), types.NamespacedName{Name: obj.Name, Namespace: obj.Namespace}, obj))
+
+	require.True(t, conditions.IsStalled(obj))
 }
 
 func TestProductDeploymentGeneratorReconcilerWithValueFile(t *testing.T) {

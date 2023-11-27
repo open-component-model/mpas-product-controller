@@ -6,6 +6,7 @@ package ocm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -121,17 +122,18 @@ func (c *Client) GetComponentVersion(ctx context.Context, octx ocm.Context, url,
 	return cv, nil
 }
 
+var ErrNoProductDescription = errors.New("no product description")
+
 func (c *Client) GetProductDescription(ctx context.Context, octx ocm.Context, cv ocm.ComponentVersionAccess) ([]byte, error) {
 	resources, err := cv.GetResourcesByResourceSelectors(compdesc.ResourceSelectorFunc(func(obj compdesc.ResourceSelectionContext) (bool, error) {
 		return obj.GetType() == ProductDescriptionType, nil
 	}))
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to get resource by selector: %w", err)
 	}
 
-	if len(resources) != 1 {
-		return nil, fmt.Errorf("number of product descriptions in component should be 1 but was: %d", len(resources))
+	if len(resources) == 0 {
+		return nil, ErrNoProductDescription
 	}
 
 	resource := resources[0]
