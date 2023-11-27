@@ -47,7 +47,7 @@ spec:
         target.mpas.ocm.software/ingress-enabled: "true"
 ```
 
-It defines a set of `pipelines` that are executed after each other. A pipeline consists of the following objects:
+in series.
 
 #### source
 
