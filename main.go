@@ -18,6 +18,8 @@ import (
 
 	"github.com/open-component-model/mpas-product-controller/pkg/deployers/kubernetes"
 	"github.com/open-component-model/mpas-product-controller/pkg/ocm"
+	"github.com/open-component-model/mpas-product-controller/pkg/validators/gitea"
+	"github.com/open-component-model/mpas-product-controller/pkg/validators/github"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -162,6 +164,19 @@ func main() {
 		EventRecorder:       mgr.GetEventRecorderFor("product-deployment-pipeline-scheduler"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create scheduler", "scheduler", "ProductDeploymentScheduler")
+		os.Exit(1)
+	}
+
+	giteaValidator := gitea.NewValidator(mgr.GetClient(), nil)
+	githubValidator := github.NewValidator(mgr.GetClient(), giteaValidator)
+	if err = (&controllers.ValidationReconciler{
+		Client:              mgr.GetClient(),
+		Scheme:              mgr.GetScheme(),
+		EventRecorder:       mgr.GetEventRecorderFor("validation-reconciler"),
+		MpasSystemNamespace: mpasSystemNamespace,
+		Validator:           githubValidator,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Validation")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

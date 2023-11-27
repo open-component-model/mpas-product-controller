@@ -21,15 +21,15 @@ import (
 
 func TestFetchValuesFileContent(t *testing.T) {
 	testValues := `backend: {
-		cacheAddr: tcp://redis:6379
+		cacheAddr: "tcp://redis:6379"
 		replicas: 1
 	}
 cache: {
 		replicas: 1
 }
-frontend:n {
-		color: red
-		message: Hello, world!
+frontend: {
+		color: "red"
+		message: "Hello, world!"
 		replicas: 1
 }
 `

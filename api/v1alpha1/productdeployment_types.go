@@ -31,7 +31,7 @@ type ProductDeploymentSpec struct {
 	// +required
 	Interval metav1.Duration `json:"interval"`
 	// +required
-	Schema []byte `json:"schema,omitempty"`
+	Schema []byte `json:"schema"`
 }
 
 // ProductDeploymentStatus defines the observed state of ProductDeployment.

@@ -210,7 +210,7 @@ deployment: {
 	for _, tc := range testCase {
 		t.Run(tc.name, func(t *testing.T) {
 			config := generateConfigFile(t, tc.config)
-			ok := config.ContainsPrivateFields()
+			ok := containsPrivateFields(config.file.Decls)
 			assert.True(t, ok)
 			f2 := config.EvalWithoutPrivateFields()
 

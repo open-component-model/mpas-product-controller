@@ -70,6 +70,23 @@ func (in *ProductDeploymentPipeline) SetObservedGeneration(v int64) {
 	in.Status.ObservedGeneration = v
 }
 
+// Equals compares two ProductDeploymentPipelineSpecs for equality.
+func (in *ProductDeploymentPipeline) Equals(spec ProductDeploymentPipelineSpec) bool {
+	switch {
+	case in.Spec.Resource.Name != spec.Resource.Name || in.Spec.Resource.Version != spec.Resource.Version:
+		return false
+	case in.Spec.Localization.Name != spec.Localization.Name || in.Spec.Localization.Version != spec.Localization.Version:
+		return false
+	case in.Spec.Configuration.Rules.Name != spec.Configuration.Rules.Name || in.Spec.Configuration.Rules.Version != spec.Configuration.Rules.Version:
+		return false
+	case in.Spec.ComponentVersionRef != spec.ComponentVersionRef:
+		return false
+	case in.Spec.ConfigMapRef != spec.ConfigMapRef:
+		return false
+	}
+	return true
+}
+
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 

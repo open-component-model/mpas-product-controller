@@ -187,32 +187,34 @@ func (r *ProductDeploymentPipelineReconciler) createOrUpdateConfiguration(
 		}
 	}
 
+	spec := ocmv1alpha1.MutationSpec{
+		Interval:  metav1.Duration{Duration: 10 * time.Minute},
+		SourceRef: source,
+		ConfigRef: &ocmv1alpha1.ObjectReference{
+			NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
+				Kind:      "ComponentVersion",
+				Name:      obj.Spec.ComponentVersionRef,
+				Namespace: obj.Namespace,
+			},
+			ResourceRef: &reference,
+		},
+		ValuesFrom: &ocmv1alpha1.ValuesSource{
+			ConfigMapSource: &ocmv1alpha1.ConfigMapSource{
+				SourceRef: meta.LocalObjectReference{
+					Name: obj.Spec.ConfigMapRef,
+				},
+				Key: "values.yaml",
+				// TODO: This means that's its a must have in the config.cue file
+				// Reflect this in the cue file
+				SubPath: obj.Name,
+			},
+		},
+	}
+
 	configuration := &ocmv1alpha1.Configuration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      obj.Name + "-configuration",
 			Namespace: obj.Namespace,
-		},
-		Spec: ocmv1alpha1.MutationSpec{
-			Interval:  metav1.Duration{Duration: 10 * time.Minute},
-			SourceRef: source,
-			ConfigRef: &ocmv1alpha1.ObjectReference{
-				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
-					Kind:      "ComponentVersion",
-					Name:      obj.Spec.ComponentVersionRef,
-					Namespace: obj.Namespace,
-				},
-				ResourceRef: &reference,
-			},
-			ValuesFrom: &ocmv1alpha1.ValuesSource{
-				ConfigMapSource: &ocmv1alpha1.ConfigMapSource{
-					SourceRef: meta.LocalObjectReference{
-						Name: obj.Spec.ConfigMapRef,
-					},
-					Key: "values.yaml",
-					// TODO: This means that's its a must have in the config.cue file
-					SubPath: obj.Name,
-				},
-			},
 		},
 	}
 
@@ -221,6 +223,18 @@ func (r *ProductDeploymentPipelineReconciler) createOrUpdateConfiguration(
 			if err := controllerutil.SetOwnerReference(obj, configuration, r.Scheme); err != nil {
 				return fmt.Errorf("failed to set owner to configuration object: %w", err)
 			}
+		}
+
+		if configuration.Spec.SourceRef.ResourceRef == nil || configuration.Spec.SourceRef.ResourceRef.Name != spec.SourceRef.ResourceRef.Name {
+			configuration.Spec = spec
+		}
+
+		if configuration.Spec.ConfigRef.ResourceRef == nil || configuration.Spec.ConfigRef.ResourceRef.Name != spec.ConfigRef.ResourceRef.Name {
+			configuration.Spec = spec
+		}
+
+		if configuration.Spec.ValuesFrom.ConfigMapSource == nil || configuration.Spec.ValuesFrom.ConfigMapSource.SourceRef.Name != spec.ValuesFrom.ConfigMapSource.SourceRef.Name {
+			configuration.Spec = spec
 		}
 
 		return nil

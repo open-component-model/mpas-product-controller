@@ -94,15 +94,6 @@ const (
 
 	// CreateConfigMapFailedReason indicates that the config map could not be created.
 	CreateConfigMapFailedReason = "CreateConfigMapFailed"
-
-	// ConfigRetrievalFailedReason indicates that the config file could not be retrieved.
-	ConfigRetrievalFailedReason = "ConfigRetrievalFailed"
-
-	// SchemaRetrievalFailedReason indicates that the schema file could not be retrieved.
-	SchemaRetrievalFailedReason = "SchemaRetrievalFailed"
-
-	// ConfigValidationFailedReason indicates that the config file could not be validated.
-	ConfigValidationFailedReason = "ConfigValidationFailed"
 )
 
 const (

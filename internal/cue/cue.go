@@ -14,7 +14,6 @@ import (
 	"cuelang.org/go/cue/cuecontext"
 	"cuelang.org/go/cue/format"
 	"cuelang.org/go/cue/parser"
-	"cuelang.org/go/pkg/encoding/json"
 	"cuelang.org/go/pkg/encoding/yaml"
 	"golang.org/x/exp/slices"
 )
@@ -97,19 +96,11 @@ func (f *File) deltaFrom(file *ast.File) cue.Value {
 	return f.ctx.BuildFile(file, cue.Scope(f.ctx.BuildFile(f.file)))
 }
 
-// CopyWithoutPrivateFields returns a copy of the cue file without private fields.
-// note: calling Eval() after CopyWithoutPrivateFields() will add the private fields back.
+// EvalWithoutPrivateFields evaluates the cue file and removes any private fields.
+// note: calling Eval() after Eval() EvalWithoutPrivateFields() will add the private fields back
+// while removing the attributes.
 func (f *File) EvalWithoutPrivateFields() *File {
 	ctx := cuecontext.New()
-	file := &File{
-		Name: f.Name,
-		ctx:  ctx,
-		file: &ast.File{
-			Decls: f.file.Decls,
-		},
-		v: f.v,
-	}
-
 	syn := []cue.Option{
 		cue.Final(),
 		cue.Definitions(true),
@@ -118,17 +109,11 @@ func (f *File) EvalWithoutPrivateFields() *File {
 		cue.ErrorsAsValues(false),
 	}
 
-	file = eval(f, syn)
-
-	removePrivateFields(&file.file.Decls)
-	f.v = ctx.BuildFile(file.file)
-	file.setComments(f.v.Doc())
-	return file
-}
-
-// ContainsPrivateFields returns true if the cue file contains private fields.
-func (f *File) ContainsPrivateFields() bool {
-	return containsPrivateFields(f.file.Decls)
+	f = eval(f, syn)
+	removePrivateFields(&f.file.Decls)
+	f.v = ctx.BuildFile(f.file)
+	f.setComments(f.v.Doc())
+	return f
 }
 
 func containsPrivateFields(values []ast.Decl) bool {
@@ -227,11 +212,6 @@ func unify(v1, v2 cue.Value) cue.Value {
 	return v1.Unify(v2)
 }
 
-// Json returns the json representation of the cue file.
-func (f *File) Json() (string, error) {
-	return json.Marshal(f.value())
-}
-
 // Format formats the cue file.
 func (f *File) Format() ([]byte, error) {
 	return format.Node(f.file, format.Simplify())
@@ -267,6 +247,8 @@ func (f *File) Eval() *File {
 	return eval(f, syn)
 }
 
+// eval evaluates the cue file.
+// It modifies the cue file in place.
 func eval(f *File, syn []cue.Option) *File {
 	v := f.value()
 	node := v.Syntax(syn...)
@@ -274,6 +256,7 @@ func eval(f *File, syn []cue.Option) *File {
 		Filename: f.file.Filename,
 		Decls:    node.(*ast.StructLit).Elts,
 	}
+
 	f.file = newfile
 	f.v = f.ctx.BuildFile(newfile)
 	f.setComments(v.Doc())

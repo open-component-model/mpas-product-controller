@@ -120,7 +120,7 @@ func (r *ProductDeploymentGeneratorReconciler) SetupWithManager(mgr ctrl.Manager
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=componentversions;componentdescriptors,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=localizations;configurations,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=fluxdeployers,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories;ocirepositories;buckets;ocirepositories,verbs=create;update;patch;delete;get;list;watch
+//+kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories;ocirepositories;buckets,verbs=create;update;patch;delete;get;list;watch
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=snapshots,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=snapshots/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=delivery.ocm.software,resources=snapshots/finalizers,verbs=update
@@ -166,6 +166,7 @@ func (r *ProductDeploymentGeneratorReconciler) Reconcile(ctx context.Context, re
 }
 
 func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator) (_ ctrl.Result, err error) {
+
 	subscription := &replicationv1.ComponentSubscription{}
 
 	if err := r.Get(ctx, types.NamespacedName{
@@ -517,13 +518,6 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	err = config.Validate(schema)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to validate configuration values file: %w", err)
-	}
-
-	if existingConfigFile != nil {
-		values, err = config.Unify([]*cue.File{schema})
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to unify values with schema: %w", err)
-		}
 	}
 
 	configBytes, err := config.Format()

@@ -19,8 +19,8 @@ import (
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
 	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
 	"github.com/open-component-model/mpas-product-controller/internal/cue"
+	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
-	"github.com/open-component-model/ocm-controller/pkg/event"
 	"github.com/open-component-model/ocm-controller/pkg/status"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -67,7 +67,11 @@ func (r *ProductDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (*ProductDeploymentReconciler) indexConfigMap(mgr ctrl.Manager) error {
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &corev1.ConfigMap{}, controllerMetadataKey, func(rawObj client.Object) []string {
-		cfg := rawObj.(*corev1.ConfigMap)
+		cfg, ok := rawObj.(*corev1.ConfigMap)
+		if !ok {
+			return nil
+		}
+
 		labels := cfg.GetLabels()
 		if labels == nil {
 			return nil
@@ -86,7 +90,10 @@ func (*ProductDeploymentReconciler) indexConfigMap(mgr ctrl.Manager) error {
 
 func (*ProductDeploymentReconciler) indexProductDeploymentPipeline(mgr ctrl.Manager) error {
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1alpha1.ProductDeploymentPipeline{}, controllerMetadataKey, func(rawObj client.Object) []string {
-		pipeline := rawObj.(*v1alpha1.ProductDeploymentPipeline)
+		pipeline, ok := rawObj.(*v1alpha1.ProductDeploymentPipeline)
+		if !ok {
+			return nil
+		}
 		owner := metav1.GetControllerOf(pipeline)
 		if owner == nil {
 			return nil
@@ -107,8 +114,6 @@ func (*ProductDeploymentReconciler) indexProductDeploymentPipeline(mgr ctrl.Mana
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeployments/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeployments/finalizers,verbs=update
 //+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=mpas.ocm.software,resources=projects,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=source.toolkit.fluxcd.io,resources=gitrepositories;ocirepositories;buckets;ocirepositories,verbs=create;update;patch;delete;get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -174,43 +179,12 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 		return ctrl.Result{}, fmt.Errorf("failed to find the project in the namespace: %w", err)
 	}
 
-	config, err := fetchExistingConfigFile(ctx, r.Client, obj.Name, project)
+	// If there is an error its either because we failed to list/create the configmap or we failed to delete the old ones.
+	// In both cases we want to mark the object as not ready and requeue
+	configName, configUpdated, err := r.createOrUpdatedValuesConfigMap(ctx, obj, project)
 	if err != nil {
-		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.ConfigRetrievalFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to retrieve existing config file: %w", err)
-	}
-
-	schema, err := cue.New("schema", "", obj.Spec.Schema)
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.SchemaRetrievalFailedReason, err.Error())
-		return ctrl.Result{}, fmt.Errorf("failed to retrieve schema: %w", err)
-	}
-
-	err = config.Validate(schema)
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.ConfigValidationFailedReason, err.Error())
-		return ctrl.Result{}, fmt.Errorf("failed to validate config: %w", err)
-	}
-
-	values, err := config.Merge(schema)
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.ConfigValidationFailedReason, err.Error())
-		return ctrl.Result{}, fmt.Errorf("failed to merge config with schema: %w", err)
-	}
-
-	valuesYaml, err := values.Yaml()
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.ConfigValidationFailedReason, err.Error())
-		return ctrl.Result{}, fmt.Errorf("failed to convert config values to yaml: %w", err)
-	}
-
-	configName, configUpdated, err := r.generateConfigMap(ctx, obj, string(valuesYaml))
-	if err != nil {
-		// If there is an error its either because we failed to list/create the configmap or we failed to delete the old ones.
-		// In both cases we want to mark the object as not ready and requeue
 		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.CreateConfigMapFailedReason, err.Error())
-		return ctrl.Result{}, fmt.Errorf("failed to generate configmap: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to validate config: %w", err)
 	}
 
 	alreadyCreatedPipelines := make(map[string]struct{})
@@ -266,16 +240,7 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 				}
 			}
 
-			switch {
-			case pobj.Spec.Resource.Name != spec.Resource.Name || pobj.Spec.Resource.Version != spec.Resource.Version:
-				pobj.Spec = spec
-			case pobj.Spec.Localization.Name != spec.Localization.Name || pobj.Spec.Localization.Version != spec.Localization.Version:
-				pobj.Spec = spec
-			case pobj.Spec.Configuration.Rules.Name != spec.Configuration.Rules.Name || pobj.Spec.Configuration.Rules.Version != spec.Configuration.Rules.Version:
-				pobj.Spec = spec
-			case pobj.Spec.ComponentVersionRef != spec.ComponentVersionRef:
-				pobj.Spec = spec
-			case pobj.Spec.ConfigMapRef != spec.ConfigMapRef:
+			if !pobj.Equals(spec) {
 				pobj.Spec = spec
 			}
 
@@ -294,6 +259,48 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 
 	// TODO: do something with failed and successful pipelines
 	return ctrl.Result{RequeueAfter: jitter.JitteredIntervalDuration(obj.GetRequeueAfter())}, nil
+}
+
+// createOrUpdatedValuesConfigMap generates the values.yaml file for the product deployment and returns the name of the configmap that
+// contains the values.yaml file.
+// It retrieves the existing config.cue, performs validation and generate a yaml representation of the values that is used
+// to create the configmap.
+func (r *ProductDeploymentReconciler) createOrUpdatedValuesConfigMap(ctx context.Context, obj *v1alpha1.ProductDeployment, project *projectv1.Project) (string, bool, error) {
+	config, err := fetchExistingConfigFile(ctx, r.Client, obj.Name, project)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to retrieve config: %w", err)
+	}
+
+	if config == nil {
+		return "", false, fmt.Errorf("no config found")
+	}
+
+	schema, err := cue.New("schema", "", obj.Spec.Schema)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to retrieve schema: %w", err)
+	}
+
+	err = config.Validate(schema)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to validate config: %w", err)
+	}
+
+	values, err := config.Merge(schema)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to merge config with schema: %w", err)
+	}
+
+	valuesYaml, err := values.Yaml()
+	if err != nil {
+		return "", false, fmt.Errorf("failed to convert config values to yaml: %w", err)
+	}
+
+	configName, configUpdated, err := r.generateConfigMap(ctx, obj, string(valuesYaml))
+	if err != nil {
+		return "", false, fmt.Errorf("failed to generate configmap: %w", err)
+	}
+
+	return configName, configUpdated, nil
 }
 
 func (r *ProductDeploymentReconciler) createOrUpdateComponentVersion(ctx context.Context, obj *v1alpha1.ProductDeployment) error {
@@ -348,7 +355,6 @@ func (r *ProductDeploymentReconciler) generateConfigMap(ctx context.Context, obj
 
 	configName := obj.Name + "-values-" + hashValues(values)
 	for _, cm := range existingMaps.Items {
-		fmt.Println("existing configmap", cm.Name)
 		if cm.Name == configName {
 			return configName, false, nil
 		}
@@ -371,16 +377,13 @@ func (r *ProductDeploymentReconciler) generateConfigMap(ctx context.Context, obj
 		return configName, false, fmt.Errorf("failed to create configmap: %w", err)
 	}
 
-	if configMap.ObjectMeta.CreationTimestamp.IsZero() {
-		if err := controllerutil.SetOwnerReference(obj, configMap, r.Scheme); err != nil {
-			return configName, true, fmt.Errorf("failed to set owner to configmap object: %w", err)
-		}
+	if err := controllerutil.SetOwnerReference(obj, configMap, r.Scheme); err != nil {
+		return configName, true, fmt.Errorf("failed to set owner to configmap object: %w", err)
 	}
 
 	// garbage collect old configmaps
 	var errf error
 	for _, cm := range existingMaps.Items {
-		// We know we won't delete the one we just created because we already checked for that.
 		err := r.Client.Delete(ctx, &cm)
 		if err != nil {
 			errf = errors.Join(errf, err)

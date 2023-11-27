@@ -51,7 +51,6 @@ require (
 	k8s.io/klog/v2 v2.100.1
 	k8s.io/utils v0.0.0-20230505201702-9f6742963106
 	sigs.k8s.io/controller-runtime v0.16.2
-	sigs.k8s.io/yaml v1.3.0
 )
 
 require (
@@ -325,4 +324,5 @@ require (
 	sigs.k8s.io/kustomize/kyaml v0.14.3-0.20230601165947-6ce0bf390ce3 // indirect
 	sigs.k8s.io/release-utils v0.7.4 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.3.0 // indirect
+	sigs.k8s.io/yaml v1.3.0 // indirect
 )
