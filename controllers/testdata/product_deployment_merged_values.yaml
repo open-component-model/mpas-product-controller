@@ -1,0 +1,39 @@
+apiVersion: mpas.ocm.software/v1alpha1
+kind: ProductDeployment
+metadata:
+  creationTimestamp: null
+  name: test-product-deployment-generator
+  namespace: test-namespace
+spec:
+  component:
+    name: github.com/open-component-model/mpas
+    registry:
+      url: https://github.com/open-component-model/source
+    version: v0.0.1
+  interval: 1s
+  pipelines:
+  - configuration:
+      rules:
+        name: config
+        referencePath:
+        - name: backend
+        version: 1.0.0
+    localization:
+      name: config
+      referencePath:
+      - name: backend
+      version: 1.0.0
+    name: backend
+    resource:
+      name: manifests
+      referencePath:
+      - name: backend
+      version: 1.0.0
+    targetRole:
+      selector:
+        matchLabels:
+          target.mpas.ocm.software/ingress-enabled: "true"
+      type: kubernetes
+  schema: Ly8gICMgQ29uZmlndXJhdGlvbiBJbnN0cnVjdGlvbnMKLy8KLy8gIFRoaXMgaXMgdGhlIGFwaSBzZXJ2aWNlIG9mIHRoZSBwb2RpbmZvIG1pY3Jvc2VydmljZXMgYXBwbGljYXRpb24uCi8vCi8vICBUaGUgZm9sbG93aW5nIHBhcmFtZXRlcnMgYXJlIGF2YWlsYWJsZSBmb3IgY29uZmlndXJhdGlvbjoKLy8KLy8gIHwgUGFyYW1ldGVyIHwgVHlwZSAgICB8IERlZmF1bHQgICAgICAgICAgfCBEZXNjcmlwdGlvbiAgICAgICAgICAgICAgICAgICAgICAgICAgICB8Ci8vICB8LS0tLS0tLS0tLS18LS0tLS0tLS0tfC0tLS0tLS0tLS0tLS0tLS0tLXwtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tfAovLyAgfCByZXBsaWNhcyAgfCBpbnRlZ2VyIHwgMiAgICAgICAgICAgICAgICB8IE51bWJlciBvZiByZXBsaWNhcyBmb3IgdGhlIGFwcGxpY2F0aW9uIHwKLy8gIHwgY2FjaGVBZGRyIHwgc3RyaW5nICB8IHRjcDovL3JlZGlzOjYzNzkgfCBBZGRyZXNzIG9mIHRoZSBjYWNoZSBzZXJ2ZXIgICAgICAgICAgICB8CgojU2NoZW1hVmVyc2lvbjogInYxLjAuMCIKCmRlcGxveW1lbnQ6IHsKCS8vIHRoaXMgZmllbGQgaGFzIGEgZGVmYXVsdCB2YWx1ZSBvZiAyCglyZXBsaWNhczogKjIgfCBpbnQKCS8vIHRoaXMgaXMgYSByZXF1aXJlZCBmaWVsZCB3aXRoIG9mIHR5cGUgc3RyaW5nIHdpdGggYSBjb25zdHJhaW50CgljYWNoZUFkZHI6ICoidGNwOi8vcmVkaXM6NjM3OSIgfCBzdHJpbmcgJiA9fiJedGNwOi8vLit8Xmh0dHBzOi8vLisiCgkvLyB0aGlzIGlzIGEgZ2VuZXJhdGVkIGZpZWxkIHRoYXQgd2lsbCBub3QgYmUgZXhwb3NlZCB0byBpbiB0aGUgY29uZmlnLmN1ZSBmaWxlCgkvLyBwYXJ0IG9mIHRoZSBmaW5hbCBjb25maWd1cmF0aW9uIHZhbHVlcwoJbWF4X3JlcGxpY2FzOiByZXBsaWNhcyAqIDUgQHByaXZhdGUodHJ1ZSkKfQo=
+  serviceAccountName: test-service-account
+status: {}

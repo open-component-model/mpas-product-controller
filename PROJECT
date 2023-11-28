@@ -46,6 +46,7 @@ resources:
 - api:
     crdVersion: v1
     namespaced: true
+  controller: true
   domain: ocm.software
   group: mpas
   kind: Target

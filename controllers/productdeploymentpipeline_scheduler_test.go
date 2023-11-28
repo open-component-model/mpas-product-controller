@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2023 SAP SE or an SAP affiliate company and Open Component Model contributors.
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package controllers
 
 import (
@@ -9,6 +13,7 @@ import (
 	mpasv1alpha1 "github.com/open-component-model/mpas-product-controller/api/v1alpha1"
 	"github.com/open-component-model/mpas-product-controller/pkg/deployers"
 	"github.com/open-component-model/ocm-controller/api/v1alpha1"
+	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,7 +54,7 @@ func TestSnapshotIsAvailable(t *testing.T) {
 		Spec: mpasv1alpha1.ProductDeploymentPipelineSpec{
 			ComponentVersionRef: "test-pipeline-component-version",
 			Resource: mpasv1alpha1.ResourceReference{
-				ElementMeta: v1alpha1.ElementMeta{
+				ElementMeta: ocmv1alpha1.ElementMeta{
 					Name:    "backend",
 					Version: "0.0.1",
 				},
@@ -60,7 +65,7 @@ func TestSnapshotIsAvailable(t *testing.T) {
 				},
 			},
 			Localization: mpasv1alpha1.ResourceReference{
-				ElementMeta: v1alpha1.ElementMeta{
+				ElementMeta: ocmv1alpha1.ElementMeta{
 					Name:    "manifests",
 					Version: "0.0.1",
 				},
@@ -123,7 +128,7 @@ func TestSnapshotIsUnavailable(t *testing.T) {
 		Spec: mpasv1alpha1.ProductDeploymentPipelineSpec{
 			ComponentVersionRef: "test-pipeline-component-version",
 			Resource: mpasv1alpha1.ResourceReference{
-				ElementMeta: v1alpha1.ElementMeta{
+				ElementMeta: ocmv1alpha1.ElementMeta{
 					Name:    "backend",
 					Version: "0.0.1",
 				},
@@ -134,7 +139,7 @@ func TestSnapshotIsUnavailable(t *testing.T) {
 				},
 			},
 			Localization: mpasv1alpha1.ResourceReference{
-				ElementMeta: v1alpha1.ElementMeta{
+				ElementMeta: ocmv1alpha1.ElementMeta{
 					Name:    "manifests",
 					Version: "0.0.1",
 				},

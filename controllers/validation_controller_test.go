@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2022 SAP SE or an SAP affiliate company and Open Component Model contributors.
+//
+// SPDX-License-Identifier: Apache-2.0
+
 package controllers
 
 import (
@@ -111,19 +115,17 @@ func TestBasicReconcile(t *testing.T) {
 			Namespace: testNamespace.Name,
 		},
 		Spec: mpasv1alpha1.ValidationSpec{
-			ValidationRules: []mpasv1alpha1.ValidationData{
-				{
-					Data: []byte(`package main
-
-deny[msg] {
-  not input.replicas
-
-  msg := "replicas must be set"
+			Schema: []byte(`#SchemaVersion: "v1.0.0"
+deployment: {
+	// this field has a default value of 2
+	replicas: *2 | int
+	// this is a required field with of type string with a constraint
+	cacheAddr: *"tcp://redis:6379" | string & =~"^tcp://.+|^https://.+"
+	// this is a generated field that will not be exposed to in the config.cue file
+	// part of the final configuration values
+	max_replicas: replicas * 5 @private(true)
 }
 `),
-					Name: "backend",
-				},
-			},
 			ServiceAccountName: "default",
 			Interval:           metav1.Duration{Duration: 1 * time.Second},
 			SyncRef: meta.NamespacedObjectReference{

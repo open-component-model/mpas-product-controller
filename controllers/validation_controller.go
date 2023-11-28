@@ -14,11 +14,11 @@ import (
 	"github.com/fluxcd/pkg/runtime/conditions"
 	"github.com/fluxcd/pkg/runtime/patch"
 	sourcebeta2 "github.com/fluxcd/source-controller/api/v1beta2"
-	"gopkg.in/yaml.v3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -29,16 +29,18 @@ import (
 
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
 	gitmpasv1alpha1 "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
+	"github.com/open-component-model/ocm-controller/pkg/status"
 
 	mpasv1alpha1 "github.com/open-component-model/mpas-product-controller/api/v1alpha1"
+	"github.com/open-component-model/mpas-product-controller/internal/cue"
 	"github.com/open-component-model/mpas-product-controller/pkg/validators"
-	"github.com/open-component-model/mpas-product-controller/pkg/validators/rego"
 )
 
 // ValidationReconciler reconciles a Validation object
 type ValidationReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme        *runtime.Scheme
+	EventRecorder record.EventRecorder
 
 	MpasSystemNamespace string
 	Validator           validators.Validator
@@ -132,6 +134,7 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	project, err := GetProjectFromObjectNamespace(ctx, r.Client, sync, r.MpasSystemNamespace)
 	if err != nil {
 		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
+		status.MarkNotReady(r.EventRecorder, obj, mpasv1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to find the project in the namespace: %w", err)
 	}
@@ -165,7 +168,7 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		if merged {
 			logger.Info("validation pull request is merged/closed, removing git repository")
 			if err := r.deleteGitRepository(ctx, obj.Status.GitRepositoryRef); err != nil {
-				conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.GitRepositoryCleanUpFailedReason, err.Error())
+				status.MarkNotReady(r.EventRecorder, obj, mpasv1alpha1.GitRepositoryCleanUpFailedReason, err.Error())
 
 				return ctrl.Result{}, fmt.Errorf("failed to delete GitRepository tracking the values file: %w", err)
 			}
@@ -222,38 +225,26 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, fmt.Errorf("failed to fetch artifact content from git repository: %w", err)
 	}
 
-	valuesData := make(map[string]any)
-	if err := yaml.Unmarshal(data, valuesData); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to parse values file: %w", err)
+	config, err := cue.New("config", "", data)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, obj, mpasv1alpha1.ValidationFailedReason, err.Error())
+		return ctrl.Result{}, fmt.Errorf("failed to generate schema: %w", err)
 	}
 
-	for _, rule := range obj.Spec.ValidationRules {
-		outcome, reasons, err := rego.ValidateRules(ctx, rule, valuesData)
-		if err != nil {
-			conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ValidationFailedReason, err.Error())
+	schema, err := cue.New("schema", "", obj.Spec.Schema)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, obj, mpasv1alpha1.ValidationFailedReason, err.Error())
+		return ctrl.Result{}, fmt.Errorf("failed to generate schema: %w", err)
+	}
 
-			return ctrl.Result{}, fmt.Errorf("failed to validate rules %s: %w", rule.Name, err)
-		}
-
-		if !outcome {
-			conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ValidationFailedReason, fmt.Sprintf("validation failed for %s with reason: %s", rule.Name, reasons))
-			obj.Status.LastValidatedDigestOutcome = mpasv1alpha1.FailedValidationOutcome
-
-			if err := r.Validator.FailValidation(ctx, *repository, *sync); err != nil {
-				conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ValidationFailedReason, err.Error())
-
-				return ctrl.Result{}, fmt.Errorf("failed to set pull request checks to success: %w", err)
-			}
-
-			// Upon a validation error we have to stop the reconciliation. A new run will be launched
-			// when the GitRepository source is updated.
-			return ctrl.Result{}, nil
-		}
+	err = config.Validate(schema)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, obj, mpasv1alpha1.ValidationFailedReason, err.Error())
+		return ctrl.Result{}, fmt.Errorf("failed to validate config: %w", err)
 	}
 
 	if err := r.Validator.PassValidation(ctx, *repository, *sync); err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ValidationFailedReason, err.Error())
-
+		status.MarkNotReady(r.EventRecorder, obj, mpasv1alpha1.ValidationFailedReason, err.Error())
 		return ctrl.Result{}, fmt.Errorf("failed to set pull request checks to success: %w", err)
 	}
 
@@ -283,7 +274,7 @@ func (r *ValidationReconciler) createValueFileGitRepository(ctx context.Context,
 			Ignore: pointer.String(fmt.Sprintf(`# exclude all
 /*
 # include values.yaml
-!/products/%s/values.yaml
+!/products/%s/config.cue
 `, productName)),
 		},
 	}

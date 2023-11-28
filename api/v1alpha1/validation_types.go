@@ -14,9 +14,9 @@ import (
 // ValidationSpec defines the desired state of Validation
 // Fetches pull request ID and GitRepository from the Sync object.
 type ValidationSpec struct {
-	// ValidationRules points to the snapshot containing the rules
+	// Schema contains the schema that will be used to validate the configuration file.
 	// +required
-	ValidationRules []ValidationData `json:"validationRules"`
+	Schema []byte `json:"schema"`
 	// +required
 	ServiceAccountName string `json:"serviceAccountName"`
 	// +required
@@ -72,12 +72,6 @@ func (in *Validation) SetConditions(conditions []metav1.Condition) {
 // reconciled again.
 func (in Validation) GetRequeueAfter() time.Duration {
 	return in.Spec.Interval.Duration
-}
-
-// ValidationData contains information about the rules and to which resource they belong to.
-type ValidationData struct {
-	Data []byte `json:"data"`
-	Name string `json:"name"`
 }
 
 //+kubebuilder:object:root=true

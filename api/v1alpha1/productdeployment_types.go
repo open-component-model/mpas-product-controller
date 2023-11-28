@@ -5,7 +5,9 @@
 package v1alpha1
 
 import (
-	"github.com/open-component-model/ocm-controller/api/v1alpha1"
+	"time"
+
+	ocmv1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	ocmmetav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,6 +27,11 @@ type ProductDeploymentSpec struct {
 	Pipelines []Pipeline `json:"pipelines"`
 	// +required
 	ServiceAccountName string `json:"serviceAccountName"`
+	// Interval is the reconciliation interval, i.e. at what interval shall a reconciliation happen.
+	// +required
+	Interval metav1.Duration `json:"interval"`
+	// +required
+	Schema []byte `json:"schema"`
 }
 
 // ProductDeploymentStatus defines the observed state of ProductDeployment.
@@ -50,7 +57,7 @@ func (in *ProductDeployment) IsComplete() bool {
 
 type ResourceReference struct {
 	// +required
-	v1alpha1.ElementMeta `json:",inline"`
+	ocmv1.ElementMeta `json:",inline"`
 
 	// +optional
 	ReferencePath []ocmmetav1.Identity `json:"referencePath,omitempty"`
@@ -73,7 +80,6 @@ type Pipeline struct {
 	Resource      ResourceReference `json:"resource"`
 	Localization  ResourceReference `json:"localization"`
 	Configuration Configuration     `json:"configuration"`
-	Validation    ResourceReference `json:"validation"`
 	TargetRole    TargetRole        `json:"targetRole"`
 }
 
@@ -92,6 +98,12 @@ func (in *ProductDeployment) GetVID() map[string]string {
 	metadata[GroupVersion.Group+"/product_deployment"] = in.Name
 
 	return metadata
+}
+
+// GetRequeueAfter returns the duration after which the ProductDeployment must be
+// reconciled again.
+func (in ProductDeployment) GetRequeueAfter() time.Duration {
+	return in.Spec.Interval.Duration
 }
 
 func (in *ProductDeployment) SetObservedGeneration(v int64) {

@@ -38,6 +38,11 @@ spec:
             properties:
               interval:
                 type: string
+              schema:
+                description: Schema contains the schema that will be used to validate
+                  the configuration file.
+                format: byte
+                type: string
               serviceAccountName:
                 type: string
               syncRef:
@@ -54,28 +59,11 @@ spec:
                 required:
                 - name
                 type: object
-              validationRules:
-                description: ValidationRules points to the snapshot containing the
-                  rules
-                items:
-                  description: ValidationData contains information about the rules
-                    and to which resource they belong to.
-                  properties:
-                    data:
-                      format: byte
-                      type: string
-                    name:
-                      type: string
-                  required:
-                  - data
-                  - name
-                  type: object
-                type: array
             required:
             - interval
+            - schema
             - serviceAccountName
             - syncRef
-            - validationRules
             type: object
           status:
             description: ValidationStatus defines the observed state of Validation

@@ -48,6 +48,18 @@ rules:
   - list
   - watch
 - apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
   - delivery.ocm.software
   resources:
   - componentdescriptors
@@ -127,6 +139,18 @@ rules:
   - delivery.ocm.software
   resources:
   - syncs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - delivery.ocm.software
+  resources:
+  - validations
   verbs:
   - create
   - delete

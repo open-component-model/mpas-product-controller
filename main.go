@@ -11,8 +11,6 @@ import (
 	"github.com/fluxcd/source-controller/api/v1beta2"
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
 	gitmpasv1alpha1 "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
-	"github.com/open-component-model/mpas-product-controller/pkg/validators/gitea"
-	"github.com/open-component-model/mpas-product-controller/pkg/validators/github"
 	v1alpha12 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	"github.com/open-component-model/ocm-controller/pkg/oci"
 	"github.com/open-component-model/ocm-controller/pkg/snapshot"
@@ -20,6 +18,8 @@ import (
 
 	"github.com/open-component-model/mpas-product-controller/pkg/deployers/kubernetes"
 	"github.com/open-component-model/mpas-product-controller/pkg/ocm"
+	"github.com/open-component-model/mpas-product-controller/pkg/validators/gitea"
+	"github.com/open-component-model/mpas-product-controller/pkg/validators/github"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -127,9 +127,10 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.ProductDeploymentReconciler{
-		Client:        mgr.GetClient(),
-		Scheme:        mgr.GetScheme(),
-		EventRecorder: mgr.GetEventRecorderFor("product-deployment-reconciler"),
+		Client:              mgr.GetClient(),
+		Scheme:              mgr.GetScheme(),
+		MpasSystemNamespace: mpasSystemNamespace,
+		EventRecorder:       mgr.GetEventRecorderFor("product-deployment-reconciler"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ProductDeployment")
 		os.Exit(1)
@@ -171,6 +172,7 @@ func main() {
 	if err = (&controllers.ValidationReconciler{
 		Client:              mgr.GetClient(),
 		Scheme:              mgr.GetScheme(),
+		EventRecorder:       mgr.GetEventRecorderFor("validation-reconciler"),
 		MpasSystemNamespace: mpasSystemNamespace,
 		Validator:           githubValidator,
 	}).SetupWithManager(mgr); err != nil {

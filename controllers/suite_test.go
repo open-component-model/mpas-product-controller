@@ -80,7 +80,12 @@ func (t *testEnv) FakeKubeClient(opts ...FakeKubeClientOption) client.Client {
 
 	return fake.NewClientBuilder().WithScheme(t.scheme).WithObjects(t.obj...).WithStatusSubresource(t.subs...).WithIndex(&v1alpha1.ProductDeploymentPipeline{}, controllerMetadataKey, func(obj client.Object) []string {
 		return []string{obj.GetName()}
-	}).Build()
+	}).
+		WithIndex(&corev1.ConfigMap{}, controllerMetadataKey, func(obj client.Object) []string {
+			owner := obj.GetLabels()[v1alpha1.ProductDeploymentOwnerLabelKey]
+			return []string{owner}
+		}).
+		Build()
 }
 
 var (

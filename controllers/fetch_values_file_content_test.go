@@ -20,15 +20,18 @@ import (
 )
 
 func TestFetchValuesFileContent(t *testing.T) {
-	testValues := `backend:
-    cacheAddr: tcp://redis:6379
-    replicas: 1 #+mpas-ignore
-cache:
-    replicas: 1
-frontend:
-    color: red
-    message: Hello, world!
-    replicas: 1 #+mpas-ignore
+	testValues := `backend: {
+		cacheAddr: "tcp://redis:6379"
+		replicas: 1
+	}
+cache: {
+		replicas: 1
+}
+frontend: {
+		color: "red"
+		message: "Hello, world!"
+		replicas: 1
+}
 `
 
 	dir := t.TempDir()
@@ -38,6 +41,7 @@ frontend:
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, string(values))
 	}))
+	defer testServer.Close()
 
 	artifact := &v1.Artifact{
 		Path: "./",
@@ -57,6 +61,7 @@ func TestFetchValuesFileContentFileDoesNotExist(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, string(values))
 	}))
+	defer testServer.Close()
 
 	artifact := &v1.Artifact{
 		Path: "./",
@@ -71,6 +76,7 @@ func TestFetchValuesFileContentContentIsCorrupted(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "not-tar")
 	}))
+	defer testServer.Close()
 
 	artifact := &v1.Artifact{
 		Path: "./",
@@ -86,7 +92,7 @@ func generateTestData(base, folder string, data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("failed to create folder: %w", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(base, folder, "values.yaml"), data, 0o777); err != nil {
+	if err := os.WriteFile(filepath.Join(base, folder, "config.cue"), data, 0o777); err != nil {
 		return nil, fmt.Errorf("failed to write values file: %w", err)
 	}
 

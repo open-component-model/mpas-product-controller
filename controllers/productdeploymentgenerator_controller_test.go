@@ -24,7 +24,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	gitv1alpha1delivery "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
-	alpha1 "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
 	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	ocmctrv1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
@@ -49,6 +48,7 @@ func TestProductDeploymentGeneratorReconciler(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, string(manifests))
 	}))
+	defer testServer.Close()
 
 	testNamespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -87,7 +87,7 @@ func TestProductDeploymentGeneratorReconciler(t *testing.T) {
 			Namespace: mpasNamespace.Name,
 		},
 		Spec: projectv1.ProjectSpec{
-			Git: alpha1.RepositorySpec{
+			Git: gitv1alpha1.RepositorySpec{
 				CommitTemplate: &gitv1alpha1.CommitTemplate{
 					Email:   "email@email.com",
 					Message: "message",
@@ -203,7 +203,7 @@ func TestProductDeploymentGeneratorReconciler(t *testing.T) {
 	require.NoError(t, err)
 	manifest, err := os.ReadFile(filepath.Join("testdata", "manifests.tar"))
 	require.NoError(t, err)
-	readme, err := os.ReadFile(filepath.Join("testdata", "README.md"))
+	schema, err := os.ReadFile(filepath.Join("testdata", "schema.cue"))
 	require.NoError(t, err)
 
 	fakeOcmClient := &fakes.MockOCM{}
@@ -211,8 +211,7 @@ func TestProductDeploymentGeneratorReconciler(t *testing.T) {
 	fakeOcmClient.GetProductDescriptionReturns(productDescription, nil)
 	fakeOcmClient.GetResourceDataReturns("config", config, nil)
 	fakeOcmClient.GetResourceDataReturns("manifest", manifest, nil)
-	fakeOcmClient.GetResourceDataReturns("instructions", readme, nil)
-	fakeOcmClient.GetResourceDataReturns("validation", []byte(""), nil)
+	fakeOcmClient.GetResourceDataReturns("schema", schema, nil)
 	fakeClient := env.FakeKubeClient(WithObjects(mpasNamespace, testNamespace, repo, project, obj, subscription, serviceAccount),
 		WithStatusSubresource(repo, project, obj, subscription))
 	fakeWriter := &mockSnapshotWriter{}
@@ -245,11 +244,11 @@ func TestProductDeploymentGeneratorReconciler(t *testing.T) {
 	modifiedReadme, err := os.ReadFile(filepath.Join("testdata", "modified_readme.md"))
 	require.NoError(t, err)
 
+	configFile, err := os.ReadFile(filepath.Join("testdata", "config.cue"))
+	require.NoError(t, err)
+
 	assert.Equal(t, string(modifiedReadme), fakeWriter.readmeContent)
-	assert.Equal(t, `backend:
-    cacheAddr: tcp://redis:6379
-    replicas: 2
-`, fakeWriter.valuesContent)
+	assert.Equal(t, string(configFile), fakeWriter.valuesContent)
 
 	productDeployment, err := os.ReadFile(filepath.Join("testdata", "product_deployment.yaml"))
 	require.NoError(t, err)
@@ -264,6 +263,7 @@ func TestProductDeploymentGeneratorReconcilerWithValueFile(t *testing.T) {
 	testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, string(manifests))
 	}))
+	defer testServer.Close()
 
 	testNamespace := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -302,7 +302,7 @@ func TestProductDeploymentGeneratorReconcilerWithValueFile(t *testing.T) {
 			Namespace: "mpas-system",
 		},
 		Spec: projectv1.ProjectSpec{
-			Git: alpha1.RepositorySpec{
+			Git: gitv1alpha1.RepositorySpec{
 				CommitTemplate: &gitv1alpha1.CommitTemplate{
 					Email:   "email@email.com",
 					Message: "message",
@@ -418,7 +418,7 @@ func TestProductDeploymentGeneratorReconcilerWithValueFile(t *testing.T) {
 	require.NoError(t, err)
 	manifest, err := os.ReadFile(filepath.Join("testdata", "manifests.tar"))
 	require.NoError(t, err)
-	readme, err := os.ReadFile(filepath.Join("testdata", "README.md"))
+	schema, err := os.ReadFile(filepath.Join("testdata", "schema.cue"))
 	require.NoError(t, err)
 
 	fakeOcmClient := &fakes.MockOCM{}
@@ -426,8 +426,7 @@ func TestProductDeploymentGeneratorReconcilerWithValueFile(t *testing.T) {
 	fakeOcmClient.GetProductDescriptionReturns(productDescription, nil)
 	fakeOcmClient.GetResourceDataReturns("config", config, nil)
 	fakeOcmClient.GetResourceDataReturns("manifest", manifest, nil)
-	fakeOcmClient.GetResourceDataReturns("instructions", readme, nil)
-	fakeOcmClient.GetResourceDataReturns("validation", []byte(""), nil)
+	fakeOcmClient.GetResourceDataReturns("schema", schema, nil)
 	fakeClient := env.FakeKubeClient(WithObjects(mpasNamespace, testNamespace, repo, project, obj, subscription, serviceAccount),
 		WithStatusSubresource(repo, project, obj, subscription))
 	fakeWriter := &mockSnapshotWriter{}
@@ -460,13 +459,13 @@ func TestProductDeploymentGeneratorReconcilerWithValueFile(t *testing.T) {
 	modifiedReadme, err := os.ReadFile(filepath.Join("testdata", "modified_readme.md"))
 	require.NoError(t, err)
 
-	assert.Equal(t, string(modifiedReadme), fakeWriter.readmeContent)
-	assert.Equal(t, `backend:
-    cacheAddr: tcp://redis:6379
-    replicas: 2 #+mpas-ignore
-`, fakeWriter.valuesContent)
+	mergedConfig, err := os.ReadFile(filepath.Join("testdata", "merged_config.cue"))
+	require.NoError(t, err)
 
-	productDeployment, err := os.ReadFile(filepath.Join("testdata", "product_deployment.yaml"))
+	assert.Equal(t, string(modifiedReadme), fakeWriter.readmeContent)
+	assert.Equal(t, string(mergedConfig), fakeWriter.valuesContent)
+
+	productDeployment, err := os.ReadFile(filepath.Join("testdata", "product_deployment_merged_values.yaml"))
 	require.NoError(t, err)
 
 	assert.Equal(t, string(productDeployment), fakeWriter.productDeploymentContent)
@@ -491,7 +490,7 @@ func (m *mockSnapshotWriter) Write(ctx context.Context, owner ocmctrv1.SnapshotW
 		return "", fmt.Errorf("failed to read product deployment content: %w", err)
 	}
 
-	valuesContent, err := os.ReadFile(filepath.Join(sourceDir, "test-product-deployment-generator", "values.yaml"))
+	valuesContent, err := os.ReadFile(filepath.Join(sourceDir, "test-product-deployment-generator", "config.cue"))
 	if err != nil {
 		return "", fmt.Errorf("failed to read values file: %w", err)
 	}

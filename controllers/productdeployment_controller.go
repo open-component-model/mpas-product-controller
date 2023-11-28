@@ -6,15 +6,23 @@ package controllers
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
+	"github.com/fluxcd/pkg/runtime/jitter"
 	"github.com/fluxcd/pkg/runtime/patch"
 	rreconcile "github.com/fluxcd/pkg/runtime/reconcile"
+	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
+	"github.com/open-component-model/mpas-product-controller/internal/cue"
+	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
+	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 	"github.com/open-component-model/ocm-controller/pkg/status"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -25,9 +33,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-
-	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
-	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
 )
 
 const (
@@ -37,14 +42,58 @@ const (
 // ProductDeploymentReconciler reconciles a ProductDeployment object
 type ProductDeploymentReconciler struct {
 	client.Client
-	Scheme        *runtime.Scheme
-	EventRecorder record.EventRecorder
+	Scheme              *runtime.Scheme
+	EventRecorder       record.EventRecorder
+	MpasSystemNamespace string
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ProductDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	err := r.indexProductDeploymentPipeline(mgr)
+	if err != nil {
+		return err
+	}
+
+	err = r.indexConfigMap(mgr)
+	if err != nil {
+		return err
+	}
+
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&v1alpha1.ProductDeployment{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Owns(&v1alpha1.ProductDeploymentPipeline{}).
+		Complete(r)
+}
+
+func (*ProductDeploymentReconciler) indexConfigMap(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &corev1.ConfigMap{}, controllerMetadataKey, func(rawObj client.Object) []string {
+		cfg, ok := rawObj.(*corev1.ConfigMap)
+		if !ok {
+			return nil
+		}
+
+		labels := cfg.GetLabels()
+		if labels == nil {
+			return nil
+		}
+
+		owner, ok := labels[v1alpha1.ProductDeploymentOwnerLabelKey]
+		if !ok {
+			return nil
+		}
+		return []string{owner}
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (*ProductDeploymentReconciler) indexProductDeploymentPipeline(mgr ctrl.Manager) error {
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1alpha1.ProductDeploymentPipeline{}, controllerMetadataKey, func(rawObj client.Object) []string {
-		pipeline := rawObj.(*v1alpha1.ProductDeploymentPipeline)
+		pipeline, ok := rawObj.(*v1alpha1.ProductDeploymentPipeline)
+		if !ok {
+			return nil
+		}
 		owner := metav1.GetControllerOf(pipeline)
 		if owner == nil {
 			return nil
@@ -58,16 +107,13 @@ func (r *ProductDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}); err != nil {
 		return err
 	}
-
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.ProductDeployment{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		Owns(&v1alpha1.ProductDeploymentPipeline{}).
-		Complete(r)
+	return nil
 }
 
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeployments/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeployments/finalizers,verbs=update
+//+kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -126,6 +172,21 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 		return ctrl.Result{}, fmt.Errorf("failed to create component version: %w", err)
 	}
 
+	project, err := GetProjectFromObjectNamespace(ctx, r.Client, obj, r.MpasSystemNamespace)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to find the project in the namespace: %w", err)
+	}
+
+	// If there is an error its either because we failed to list/create the configmap or we failed to delete the old ones.
+	// In both cases we want to mark the object as not ready and requeue
+	configName, configUpdated, err := r.createOrUpdatedValuesConfigMap(ctx, obj, project)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.CreateConfigMapFailedReason, err.Error())
+		return ctrl.Result{}, fmt.Errorf("failed to validate config: %w", err)
+	}
+
 	alreadyCreatedPipelines := make(map[string]struct{})
 
 	existingPipelines := &v1alpha1.ProductDeploymentPipelineList{}
@@ -148,9 +209,18 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 
 	// Done handling existing items, now create the rest.
 	for _, pipeline := range obj.Spec.Pipelines {
-		if _, ok := alreadyCreatedPipelines[pipeline.Name]; ok {
-			// already created, skip
+		if _, ok := alreadyCreatedPipelines[pipeline.Name]; ok && !configUpdated {
+			// already created, skip only if config was not updated due to the values not changing
 			continue
+		}
+
+		spec := v1alpha1.ProductDeploymentPipelineSpec{
+			Resource:            pipeline.Resource,
+			Localization:        pipeline.Localization,
+			Configuration:       pipeline.Configuration,
+			TargetRole:          pipeline.TargetRole,
+			ComponentVersionRef: r.generateComponentVersionName(obj),
+			ConfigMapRef:        configName,
 		}
 
 		pobj := &v1alpha1.ProductDeploymentPipeline{
@@ -161,14 +231,6 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 					v1alpha1.ProductDeploymentOwnerLabelKey: obj.Name,
 				},
 			},
-			Spec: v1alpha1.ProductDeploymentPipelineSpec{
-				Resource:            pipeline.Resource,
-				Localization:        pipeline.Localization,
-				Configuration:       pipeline.Configuration,
-				TargetRole:          pipeline.TargetRole,
-				Validation:          pipeline.Validation,
-				ComponentVersionRef: r.generateComponentVersionName(obj),
-			},
 		}
 
 		if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, pobj, func() error {
@@ -176,6 +238,10 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 				if err := controllerutil.SetControllerReference(obj, pobj, r.Scheme); err != nil {
 					return fmt.Errorf("failed to set owner to pipeline object object: %w", err)
 				}
+			}
+
+			if !pobj.Equals(spec) {
+				pobj.Spec = spec
 			}
 
 			return nil
@@ -192,7 +258,49 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 	status.MarkReady(r.EventRecorder, obj, "Reconciliation success")
 
 	// TODO: do something with failed and successful pipelines
-	return ctrl.Result{}, nil
+	return ctrl.Result{RequeueAfter: jitter.JitteredIntervalDuration(obj.GetRequeueAfter())}, nil
+}
+
+// createOrUpdatedValuesConfigMap generates the values.yaml file for the product deployment and returns the name of the configmap that
+// contains the values.yaml file.
+// It retrieves the existing config.cue, performs validation and generate a yaml representation of the values that is used
+// to create the configmap.
+func (r *ProductDeploymentReconciler) createOrUpdatedValuesConfigMap(ctx context.Context, obj *v1alpha1.ProductDeployment, project *projectv1.Project) (string, bool, error) {
+	config, err := fetchExistingConfigFile(ctx, r.Client, obj.Name, project)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to retrieve config: %w", err)
+	}
+
+	if config == nil {
+		return "", false, fmt.Errorf("no config found")
+	}
+
+	schema, err := cue.New("schema", "", obj.Spec.Schema)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to retrieve schema: %w", err)
+	}
+
+	err = config.Validate(schema)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to validate config: %w", err)
+	}
+
+	values, err := config.Merge(schema)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to merge config with schema: %w", err)
+	}
+
+	valuesYaml, err := values.Yaml()
+	if err != nil {
+		return "", false, fmt.Errorf("failed to convert config values to yaml: %w", err)
+	}
+
+	configName, configUpdated, err := r.generateConfigMap(ctx, obj, string(valuesYaml))
+	if err != nil {
+		return "", false, fmt.Errorf("failed to generate configmap: %w", err)
+	}
+
+	return configName, configUpdated, nil
 }
 
 func (r *ProductDeploymentReconciler) createOrUpdateComponentVersion(ctx context.Context, obj *v1alpha1.ProductDeployment) error {
@@ -237,4 +345,56 @@ func (r *ProductDeploymentReconciler) createOrUpdateComponentVersion(ctx context
 
 func (r *ProductDeploymentReconciler) generateComponentVersionName(obj *v1alpha1.ProductDeployment) string {
 	return obj.Name + "component-version"
+}
+
+func (r *ProductDeploymentReconciler) generateConfigMap(ctx context.Context, obj *v1alpha1.ProductDeployment, values string) (string, bool, error) {
+	existingMaps := &corev1.ConfigMapList{}
+	if err := r.List(ctx, existingMaps, client.InNamespace(obj.Namespace), client.MatchingFields{controllerMetadataKey: obj.Name}); err != nil {
+		return "", false, fmt.Errorf("failed to list owned configmaps: %w", err)
+	}
+
+	configName := obj.Name + "-values-" + hashValues(values)
+	for _, cm := range existingMaps.Items {
+		if cm.Name == configName {
+			return configName, false, nil
+		}
+	}
+
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configName,
+			Namespace: obj.Namespace,
+			Labels: map[string]string{
+				v1alpha1.ProductDeploymentOwnerLabelKey: obj.Name,
+			},
+		},
+		Data: map[string]string{
+			"values.yaml": values,
+		},
+	}
+
+	if err := r.Create(ctx, configMap); err != nil {
+		return configName, false, fmt.Errorf("failed to create configmap: %w", err)
+	}
+
+	if err := controllerutil.SetOwnerReference(obj, configMap, r.Scheme); err != nil {
+		return configName, true, fmt.Errorf("failed to set owner to configmap object: %w", err)
+	}
+
+	// garbage collect old configmaps
+	var errf error
+	for _, cm := range existingMaps.Items {
+		err := r.Client.Delete(ctx, &cm)
+		if err != nil {
+			errf = errors.Join(errf, err)
+		}
+	}
+	return configName, true, errf
+}
+
+func hashValues(values string) string {
+	h := sha1.New()
+	h.Write([]byte(values))
+
+	return hex.EncodeToString(h.Sum(nil))[:8]
 }

@@ -35,23 +35,20 @@ type ProductDescriptionPipeline struct {
 	Name string `json:"name"`
 	// +required
 	Source ResourceReference `json:"source"`
-	// +required
-	Validation ResourceReference `json:"validation"`
-
 	//+optional
 	TargetRoleName string `json:"targetRoleName,omitempty"`
 	//+optional
 	Localization ResourceReference `json:"localization,omitempty"`
 	//+optional
 	Configuration DescriptionConfiguration `json:"configuration,omitempty"`
+	//+required
+	Schema ResourceReference `json:"schema,omitempty"`
 }
 
 // DescriptionConfiguration contains details one parsing configuration items in a project description.
 type DescriptionConfiguration struct {
 	// +required
 	Rules ResourceReference `json:"rules"`
-	// +required
-	Readme ResourceReference `json:"readme"`
 }
 
 //+kubebuilder:object:root=true

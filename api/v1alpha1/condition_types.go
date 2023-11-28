@@ -74,6 +74,9 @@ const (
 	// ValidationFailedReason is used when the validation of a resource failed.
 	ValidationFailedReason = "ValidationFailed"
 
+	// SchemaGenerationFailedReason is used when we couldn't generate the schema.
+	SchemaGenerationFailedReason = "SchemaGenerationFailed"
+
 	// GitRepositoryCleanUpFailedReason is used when we couldn't delete the GitRepository.
 	GitRepositoryCleanUpFailedReason = "GitRepositoryCleanUpFailed"
 
@@ -88,6 +91,9 @@ const (
 
 	// AccessInvalidReason indicates that the access credentials or target are invalid.
 	AccessInvalidReason = "AccessInvalid"
+
+	// CreateConfigMapFailedReason indicates that the config map could not be created.
+	CreateConfigMapFailedReason = "CreateConfigMapFailed"
 )
 
 const (
