@@ -26,7 +26,7 @@ type ValidationSpec struct {
 	SyncRef meta.NamespacedObjectReference `json:"syncRef"`
 }
 
-// ValidationStatus defines the observed state of Validation
+// ValidationStatus defines the observed state of Validation.
 type ValidationStatus struct {
 	// ObservedGeneration is the last reconciled generation.
 	// +optional
@@ -77,7 +77,7 @@ func (in Validation) GetRequeueAfter() time.Duration {
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// Validation is the Schema for the validations API
+// Validation is the Schema for the validations API.
 type Validation struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -88,7 +88,7 @@ type Validation struct {
 
 //+kubebuilder:object:root=true
 
-// ValidationList contains a list of Validation
+// ValidationList contains a list of Validation.
 type ValidationList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

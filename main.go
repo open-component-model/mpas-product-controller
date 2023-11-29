@@ -16,11 +16,6 @@ import (
 	"github.com/open-component-model/ocm-controller/pkg/snapshot"
 	replicationv1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 
-	"github.com/open-component-model/mpas-product-controller/pkg/deployers/kubernetes"
-	"github.com/open-component-model/mpas-product-controller/pkg/ocm"
-	"github.com/open-component-model/mpas-product-controller/pkg/validators/gitea"
-	"github.com/open-component-model/mpas-product-controller/pkg/validators/github"
-
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -36,9 +31,14 @@ import (
 	mpasprojv1alpha1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 
 	"github.com/fluxcd/pkg/runtime/events"
+	//+kubebuilder:scaffold:imports
+
 	mpasv1alpha1 "github.com/open-component-model/mpas-product-controller/api/v1alpha1"
 	"github.com/open-component-model/mpas-product-controller/controllers"
-	//+kubebuilder:scaffold:imports
+	"github.com/open-component-model/mpas-product-controller/pkg/deployers/kubernetes"
+	"github.com/open-component-model/mpas-product-controller/pkg/ocm"
+	"github.com/open-component-model/mpas-product-controller/pkg/validators/gitea"
+	"github.com/open-component-model/mpas-product-controller/pkg/validators/github"
 )
 
 const (
@@ -82,7 +82,12 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&ociRegistryAddr, "oci-registry-addr", ":5000", "The address of the OCI registry.")
-	flag.StringVar(&mpasSystemNamespace, "mpas-system-namespace", defaultMpasSystemNamespace, "The namespace in which this controller is running in. This namespace is used to locate Project objects.")
+	flag.StringVar(
+		&mpasSystemNamespace,
+		"mpas-system-namespace",
+		defaultMpasSystemNamespace,
+		"The namespace in which this controller is running in. This namespace is used to locate Project objects.",
+	)
 
 	opts := zap.Options{
 		Development: true,
@@ -92,10 +97,11 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
+	const metricsPort = 9443
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
-		Port:                   9443,
+		Port:                   metricsPort,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "b3469b71.ocm.software",
@@ -203,5 +209,6 @@ func mustSetupEventRecorder(mgr ctrl.Manager, eventsAddr, controllerName string)
 		setupLog.Error(err, "unable to create event recorder")
 		os.Exit(1)
 	}
+
 	return eventRecorder
 }

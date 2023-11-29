@@ -113,7 +113,7 @@ func (in *ProductDeployment) SetObservedGeneration(v int64) {
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// ProductDeployment is the Schema for the productdeployments API
+// ProductDeployment is the Schema for the productdeployments API.
 type ProductDeployment struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -124,7 +124,7 @@ type ProductDeployment struct {
 
 //+kubebuilder:object:root=true
 
-// ProductDeploymentList contains a list of ProductDeployment
+// ProductDeploymentList contains a list of ProductDeployment.
 type ProductDeploymentList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

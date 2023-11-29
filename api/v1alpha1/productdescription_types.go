@@ -8,7 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ProductDescriptionSpec defines the desired state of ProductDescription
+// ProductDescriptionSpec defines the desired state of ProductDescription.
 type ProductDescriptionSpec struct {
 	// +required
 	Description string `json:"description"`
@@ -19,7 +19,7 @@ type ProductDescriptionSpec struct {
 	TargetRoles []TargetRoles `json:"targetRoles,omitempty"`
 }
 
-// ProductDescriptionStatus defines the observed state of ProductDescription
+// ProductDescriptionStatus defines the observed state of ProductDescription.
 type ProductDescriptionStatus struct{}
 
 // TargetRoles defines a target role with a name.
@@ -54,7 +54,7 @@ type DescriptionConfiguration struct {
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// ProductDescription is the Schema for the productdescriptions API
+// ProductDescription is the Schema for the productdescriptions API.
 type ProductDescription struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -65,7 +65,7 @@ type ProductDescription struct {
 
 //+kubebuilder:object:root=true
 
-// ProductDescriptionList contains a list of ProductDescription
+// ProductDescriptionList contains a list of ProductDescription.
 type ProductDescriptionList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

@@ -6,11 +6,10 @@ package controllers
 
 import (
 	"context"
-	"crypto/sha1"
+	"crypto/sha1" //nolint:gosec // good enough for our purposes
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/fluxcd/pkg/apis/meta"
 	"github.com/fluxcd/pkg/runtime/conditions"
@@ -39,7 +38,7 @@ const (
 	controllerMetadataKey = ".metadata.controller"
 )
 
-// ProductDeploymentReconciler reconciles a ProductDeployment object
+// ProductDeploymentReconciler reconciles a ProductDeployment object.
 type ProductDeploymentReconciler struct {
 	client.Client
 	Scheme              *runtime.Scheme
@@ -66,7 +65,7 @@ func (r *ProductDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (*ProductDeploymentReconciler) indexConfigMap(mgr ctrl.Manager) error {
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &corev1.ConfigMap{}, controllerMetadataKey, func(rawObj client.Object) []string {
+	return mgr.GetFieldIndexer().IndexField(context.Background(), &corev1.ConfigMap{}, controllerMetadataKey, func(rawObj client.Object) []string {
 		cfg, ok := rawObj.(*corev1.ConfigMap)
 		if !ok {
 			return nil
@@ -81,33 +80,33 @@ func (*ProductDeploymentReconciler) indexConfigMap(mgr ctrl.Manager) error {
 		if !ok {
 			return nil
 		}
+
 		return []string{owner}
-	}); err != nil {
-		return err
-	}
-	return nil
+	})
 }
 
 func (*ProductDeploymentReconciler) indexProductDeploymentPipeline(mgr ctrl.Manager) error {
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &v1alpha1.ProductDeploymentPipeline{}, controllerMetadataKey, func(rawObj client.Object) []string {
-		pipeline, ok := rawObj.(*v1alpha1.ProductDeploymentPipeline)
-		if !ok {
-			return nil
-		}
-		owner := metav1.GetControllerOf(pipeline)
-		if owner == nil {
-			return nil
-		}
+	return mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&v1alpha1.ProductDeploymentPipeline{},
+		controllerMetadataKey,
+		func(rawObj client.Object) []string {
+			pipeline, ok := rawObj.(*v1alpha1.ProductDeploymentPipeline)
+			if !ok {
+				return nil
+			}
+			owner := metav1.GetControllerOf(pipeline)
+			if owner == nil {
+				return nil
+			}
 
-		if owner.APIVersion != v1alpha1.GroupVersion.String() || owner.Kind != v1alpha1.ProductDeploymentKind {
-			return nil
-		}
+			if owner.APIVersion != v1alpha1.GroupVersion.String() || owner.Kind != v1alpha1.ProductDeploymentKind {
+				return nil
+			}
 
-		return []string{owner.Name}
-	}); err != nil {
-		return err
-	}
-	return nil
+			return []string{owner.Name}
+		},
+	)
 }
 
 //+kubebuilder:rbac:groups=mpas.ocm.software,resources=productdeployments,verbs=get;list;watch;create;update;patch;delete
@@ -121,7 +120,7 @@ func (*ProductDeploymentReconciler) indexProductDeploymentPipeline(mgr ctrl.Mana
 func (r *ProductDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	logger := log.FromContext(ctx)
 
-	logger.V(4).Info("starting reconcile loop for product deployment")
+	logger.V(v1alpha1.LevelDebug).Info("starting reconcile loop for product deployment")
 
 	obj := &v1alpha1.ProductDeployment{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
@@ -184,6 +183,7 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 	configName, configUpdated, err := r.createOrUpdatedValuesConfigMap(ctx, obj, project)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.CreateConfigMapFailedReason, err.Error())
+
 		return ctrl.Result{}, fmt.Errorf("failed to validate config: %w", err)
 	}
 
@@ -200,6 +200,7 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 
 	obj.Status.ActivePipelines = nil
 	for _, ep := range existingPipelines.Items {
+		ep := ep
 		alreadyCreatedPipelines[ep.Name] = struct{}{}
 
 		if !conditions.IsTrue(&ep, meta.ReadyCondition) {
@@ -251,12 +252,13 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 
 		obj.Status.ActivePipelines = append(obj.Status.ActivePipelines, pobj.Name)
 
-		logger.V(4).Info("pipeline object successfully created", "name", pobj.Name)
+		logger.V(v1alpha1.LevelDebug).Info("pipeline object successfully created", "name", pobj.Name)
 	}
 
 	logger.Info("all pipelines handled successfully")
 	status.MarkReady(r.EventRecorder, obj, "Reconciliation success")
 
+	//nolint:godox // yep
 	// TODO: do something with failed and successful pipelines
 	return ctrl.Result{RequeueAfter: jitter.JitteredIntervalDuration(obj.GetRequeueAfter())}, nil
 }
@@ -265,7 +267,11 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 // contains the values.yaml file.
 // It retrieves the existing config.cue, performs validation and generate a yaml representation of the values that is used
 // to create the configmap.
-func (r *ProductDeploymentReconciler) createOrUpdatedValuesConfigMap(ctx context.Context, obj *v1alpha1.ProductDeployment, project *projectv1.Project) (string, bool, error) {
+func (r *ProductDeploymentReconciler) createOrUpdatedValuesConfigMap(
+	ctx context.Context,
+	obj *v1alpha1.ProductDeployment,
+	project *projectv1.Project,
+) (string, bool, error) {
 	config, err := fetchExistingConfigFile(ctx, r.Client, obj.Name, project)
 	if err != nil {
 		return "", false, fmt.Errorf("failed to retrieve config: %w", err)
@@ -311,12 +317,12 @@ func (r *ProductDeploymentReconciler) createOrUpdateComponentVersion(ctx context
 		},
 		Spec: ocmv1alpha1.ComponentVersionSpec{
 			// Note: The interval here doesn't matter because we always pin to a specific version anyway.
-			Interval:  metav1.Duration{Duration: 10 * time.Minute},
+			Interval:  metav1.Duration{Duration: defaultPipelineRequeue},
 			Component: obj.Spec.Component.Name,
 			Repository: ocmv1alpha1.Repository{
 				URL: obj.Spec.Component.Registry.URL,
 			},
-			Verify: nil, // TODO: think about this
+			Verify: nil,
 			References: ocmv1alpha1.ReferencesConfig{
 				Expand: true,
 			},
@@ -384,16 +390,18 @@ func (r *ProductDeploymentReconciler) generateConfigMap(ctx context.Context, obj
 	// garbage collect old configmaps
 	var errf error
 	for _, cm := range existingMaps.Items {
+		cm := cm
 		err := r.Client.Delete(ctx, &cm)
 		if err != nil {
 			errf = errors.Join(errf, err)
 		}
 	}
+
 	return configName, true, errf
 }
 
 func hashValues(values string) string {
-	h := sha1.New()
+	h := sha1.New() //nolint:gosec // good enough for our purposes
 	h.Write([]byte(values))
 
 	return hex.EncodeToString(h.Sum(nil))[:8]

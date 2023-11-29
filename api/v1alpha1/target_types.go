@@ -23,7 +23,7 @@ var (
 	OCIRepository TargetType = "ocirepository"
 )
 
-// TargetSpec defines the desired state of Target
+// TargetSpec defines the desired state of Target.
 type TargetSpec struct {
 	// +required
 	Type TargetType `json:"type"`
@@ -47,7 +47,7 @@ type TargetSpec struct {
 	SecretsSelector *metav1.LabelSelector `json:"selector,omitempty"`
 }
 
-// TargetStatus defines the observed state of Target
+// TargetStatus defines the observed state of Target.
 type TargetStatus struct {
 	// ObservedGeneration is the last reconciled generation.
 	// +optional
@@ -78,7 +78,7 @@ func (in Target) GetRequeueAfter() time.Duration {
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// Target is the Schema for the targets API
+// Target is the Schema for the targets API.
 type Target struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -89,7 +89,7 @@ type Target struct {
 
 //+kubebuilder:object:root=true
 
-// TargetList contains a list of Target
+// TargetList contains a list of Target.
 type TargetList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

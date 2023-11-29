@@ -7,7 +7,7 @@ package controllers
 import (
 	"bytes"
 	"context"
-	"crypto/sha1"
+	"crypto/sha1" //nolint:gosec // good enough for our purposes
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -74,10 +74,11 @@ const (
 )
 
 var (
-	unschedulableError = errors.New("pipeline cannot be scheduled as it doesn't define any target scopes")
+	errUnschedulable = errors.New("pipeline cannot be scheduled as it doesn't define any target scopes")
+	longRequeue      = 30 * time.Second
 )
 
-// ProductDeploymentGeneratorReconciler reconciles a ProductDeploymentGenerator object
+// ProductDeploymentGeneratorReconciler reconciles a ProductDeploymentGenerator object.
 type ProductDeploymentGeneratorReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
@@ -91,11 +92,16 @@ type ProductDeploymentGeneratorReconciler struct {
 // SetupWithManager sets up the controller with the Manager.
 func (r *ProductDeploymentGeneratorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err := mgr.GetFieldIndexer().IndexField(context.TODO(), &v1alpha1.ProductDeploymentGenerator{}, sourceKey, func(rawObj client.Object) []string {
-		generator := rawObj.(*v1alpha1.ProductDeploymentGenerator)
-		var ns = generator.Spec.SubscriptionRef.Namespace
+		generator, ok := rawObj.(*v1alpha1.ProductDeploymentGenerator)
+		if !ok {
+			return nil
+		}
+
+		ns := generator.Spec.SubscriptionRef.Namespace
 		if ns == "" {
 			ns = generator.GetNamespace()
 		}
+
 		return []string{fmt.Sprintf("%s/%s", ns, generator.Spec.SubscriptionRef.Name)}
 	}); err != nil {
 		return fmt.Errorf("failed setting index fields: %w", err)
@@ -132,7 +138,7 @@ func (r *ProductDeploymentGeneratorReconciler) SetupWithManager(mgr ctrl.Manager
 func (r *ProductDeploymentGeneratorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, err error) {
 	logger := log.FromContext(ctx)
 
-	logger.V(4).Info("starting product deployment generator loop")
+	logger.V(v1alpha1.LevelDebug).Info("starting product deployment generator loop")
 
 	obj := &v1alpha1.ProductDeploymentGenerator{}
 	if err := r.Get(ctx, req.NamespacedName, obj); err != nil {
@@ -166,9 +172,7 @@ func (r *ProductDeploymentGeneratorReconciler) Reconcile(ctx context.Context, re
 }
 
 func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator) (_ ctrl.Result, err error) {
-
 	subscription := &replicationv1.ComponentSubscription{}
-
 	if err := r.Get(ctx, types.NamespacedName{
 		Name:      obj.Spec.SubscriptionRef.Name,
 		Namespace: obj.Spec.SubscriptionRef.Namespace,
@@ -178,32 +182,14 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		return ctrl.Result{}, fmt.Errorf("failed to find subscription object: %w", err)
 	}
 
-	if !conditions.IsReady(subscription) {
-		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.ComponentSubscriptionNotReadyReason, "component subscription not ready yet")
-
-		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
+	ok, err := r.shouldRun(obj, subscription)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
+	if !ok {
+		status.MarkReady(r.EventRecorder, obj, "Reconciliation success")
 
-	if obj.Status.LastReconciledVersion != "" {
-		lastReconciledGeneratorVersion, err := semver.NewVersion(obj.Status.LastReconciledVersion)
-		if err != nil {
-			status.MarkNotReady(r.EventRecorder, obj, v1alpha1.SemverParseFailedReason, err.Error())
-
-			return ctrl.Result{}, fmt.Errorf("failed to parse last reconciled version: %w", err)
-		}
-
-		lastReconciledSubscription, err := semver.NewVersion(subscription.Status.LastAppliedVersion)
-		if err != nil {
-			status.MarkNotReady(r.EventRecorder, obj, v1alpha1.SemverParseFailedReason, err.Error())
-
-			return ctrl.Result{}, fmt.Errorf("failed to parse last reconciled version: %w", err)
-		}
-
-		if lastReconciledSubscription.Equal(lastReconciledGeneratorVersion) || lastReconciledSubscription.LessThan(lastReconciledGeneratorVersion) {
-			status.MarkReady(r.EventRecorder, obj, "Reconciliation success")
-
-			return ctrl.Result{}, nil
-		}
+		return ctrl.Result{}, nil
 	}
 
 	project, err := GetProjectFromObjectNamespace(ctx, r.Client, obj, r.MpasSystemNamespace)
@@ -241,6 +227,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 
 		return ctrl.Result{}, fmt.Errorf("failed to authenticate using service account: %w", err)
 	}
+
 	defer func() {
 		if cerr := cv.Close(); cerr != nil {
 			err = errors.Join(err, cerr)
@@ -276,29 +263,98 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		}
 	}()
 
-	// Create top-level product folder.
-	if err := os.Mkdir(filepath.Join(dir, obj.Name), 0o777); err != nil {
+	sync, values, err := r.createSync(ctx, obj, *prodDesc, component, dir, cv, project)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if sync == nil {
+		return ctrl.Result{}, nil
+	}
+
+	validationSchema, err := values.Format()
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.SchemaGenerationFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to create sync request: %w", err)
+	}
+
+	hashedVersion := r.hashComponentVersion(component.Version)
+
+	validation := &v1alpha1.Validation{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      obj.Name + "-validation-" + hashedVersion,
+			Namespace: obj.Namespace,
+			Annotations: map[string]string{
+				componentVersionAnnotationKey: component.Version,
+				componentNameAnnotationKey:    component.Name,
+			},
+		},
+		Spec: v1alpha1.ValidationSpec{
+			Schema:             validationSchema,
+			ServiceAccountName: obj.Spec.ServiceAccountName,
+			Interval:           metav1.Duration{Duration: longRequeue},
+			SyncRef: meta.NamespacedObjectReference{
+				Name:      sync.Name,
+				Namespace: sync.Namespace,
+			},
+		},
+	}
+
+	if _, err := ctrl.CreateOrUpdate(ctx, r.Client, validation, func() error {
+		if validation.ObjectMeta.CreationTimestamp.IsZero() {
+			if err := controllerutil.SetOwnerReference(obj, validation, r.Scheme); err != nil {
+				return fmt.Errorf("failed to set owner to validation object: %w", err)
+			}
+		}
+
+		return nil
+	}); err != nil {
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.CreateValidationFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to create validation request: %w", err)
+	}
+
+	rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason, "components applied and generated")
+
+	obj.Status.LastReconciledVersion = component.Version
+	status.MarkReady(r.EventRecorder, obj, "Applied version: %s", component.Version)
+
+	return ctrl.Result{}, nil
+}
+
+func (r *ProductDeploymentGeneratorReconciler) createSync(ctx context.Context,
+	obj *v1alpha1.ProductDeploymentGenerator,
+	prodDesc v1alpha1.ProductDescription,
+	component replicationv1.Component,
+	dir string,
+	cv ocm.ComponentVersionAccess,
+	project *projectv1.Project,
+) (*gitv1alpha1.Sync, *cue.File, error) {
+	// Create top-level product folder
+	const perm = 0o777
+	if err := os.Mkdir(filepath.Join(dir, obj.Name), perm); err != nil {
 		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.TemporaryFolderGenerationFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to create product folder: %w", err)
+		return nil, nil, fmt.Errorf("failed to create product folder: %w", err)
 	}
 
 	rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason, "generation kubernetes resources")
 
 	productFolder := filepath.Join(dir, obj.Name)
 
-	productDeployment, values, err := r.createProductDeployment(ctx, obj, *prodDesc, component, productFolder, cv, project)
+	productDeployment, values, err := r.createProductDeployment(ctx, obj, prodDesc, component, productFolder, cv, project)
 	if err != nil {
-		if errors.Is(err, unschedulableError) {
+		if errors.Is(err, errUnschedulable) {
 			status.MarkNotReady(r.EventRecorder, obj, v1alpha1.ProductPipelineSchedulingFailedReason, err.Error())
 
 			// stop reconciling until fixed
-			return ctrl.Result{}, nil
+			return nil, nil, nil
 		}
 
 		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.CreateProductPipelineFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to create product deployment: %w", err)
+		return nil, nil, fmt.Errorf("failed to create product deployment: %w", err)
 	}
 
 	// Note that we pass in the top level folder here.
@@ -306,13 +362,13 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.CreateSnapshotFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to create snapshot for product deployment: %w", err)
+		return nil, nil, fmt.Errorf("failed to create snapshot for product deployment: %w", err)
 	}
 
 	if project.Spec.Git.CommitTemplate == nil {
 		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.CommitTemplateEmptyReason, "commit template in project cannot be empty")
 
-		return ctrl.Result{}, fmt.Errorf("commit template in project cannot be empty")
+		return nil, nil, fmt.Errorf("commit template in project cannot be empty")
 	}
 
 	repositoryRef := project.Status.RepositoryRef.Name
@@ -367,56 +423,10 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	}); err != nil {
 		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.CreateSyncFailedReason, err.Error())
 
-		return ctrl.Result{}, fmt.Errorf("failed to create sync request: %w", err)
+		return nil, nil, fmt.Errorf("failed to create sync request: %w", err)
 	}
 
-	// Create the Validation Object.
-	validationSchema, err := values.Format()
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.SchemaGenerationFailedReason, err.Error())
-		return ctrl.Result{}, fmt.Errorf("failed to create sync request: %w", err)
-	}
-
-	validation := &v1alpha1.Validation{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      obj.Name + "-validation-" + hashedVersion,
-			Namespace: obj.Namespace,
-			Annotations: map[string]string{
-				componentVersionAnnotationKey: component.Version,
-				componentNameAnnotationKey:    component.Name,
-			},
-		},
-		Spec: v1alpha1.ValidationSpec{
-			Schema:             validationSchema,
-			ServiceAccountName: obj.Spec.ServiceAccountName,
-			Interval:           metav1.Duration{Duration: 30 * time.Second},
-			SyncRef: meta.NamespacedObjectReference{
-				Name:      sync.Name,
-				Namespace: sync.Namespace,
-			},
-		},
-	}
-
-	if _, err := ctrl.CreateOrUpdate(ctx, r.Client, validation, func() error {
-		if validation.ObjectMeta.CreationTimestamp.IsZero() {
-			if err := controllerutil.SetOwnerReference(obj, validation, r.Scheme); err != nil {
-				return fmt.Errorf("failed to set owner to validation object: %w", err)
-			}
-		}
-
-		return nil
-	}); err != nil {
-		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.CreateValidationFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to create validation request: %w", err)
-	}
-
-	rreconcile.ProgressiveStatus(false, obj, meta.ProgressingReason, "components applied and generated")
-
-	obj.Status.LastReconciledVersion = component.Version
-	status.MarkReady(r.EventRecorder, obj, "Applied version: %s", component.Version)
-
-	return ctrl.Result{}, nil
+	return sync, values, nil
 }
 
 func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
@@ -498,7 +508,10 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	values := schema
 	var config *cue.File
 	if existingConfigFile == nil {
-		config = values.EvalWithoutPrivateFields()
+		config, err = values.EvalWithoutPrivateFields()
+		if err != nil {
+			return nil, nil, err
+		}
 	} else {
 		config, err = existingConfigFile.Merge(schema)
 		if err != nil {
@@ -507,7 +520,10 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 		// Evaluate the configuration file to get the final values.
 		// we do this here to make sure that the values file does not contain any
 		// optional or expr fields that are not set.
-		config = config.Eval()
+		config, err = config.Eval()
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to evaluate config: %w", err)
+		}
 	}
 
 	err = config.Sanitize()
@@ -525,11 +541,11 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 		return nil, nil, fmt.Errorf("failed to format values: %w", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, "config.cue"), configBytes, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "config.cue"), configBytes, v1alpha1.WritePermissions); err != nil {
 		return nil, nil, fmt.Errorf("failed to write configuration values file: %w", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, "README.md"), readme, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), readme, v1alpha1.WritePermissions); err != nil {
 		return nil, nil, fmt.Errorf("failed to write readme file: %w", err)
 	}
 
@@ -557,19 +573,21 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(
 	var targetRole *v1alpha1.TargetRole
 
 	if p.TargetRoleName == "" {
-		return v1alpha1.Pipeline{}, nil, fmt.Errorf("pipeline '%s' cannot be scheduled: %w", p.Name, unschedulableError)
+		return v1alpha1.Pipeline{}, nil, fmt.Errorf("pipeline '%s' cannot be scheduled: %w", p.Name, errUnschedulable)
 	}
 
 	// if the list is empty, select one from the available targets.
 	for _, role := range description.Spec.TargetRoles {
+		role := role
 		if role.Name == p.TargetRoleName {
 			targetRole = &role.TargetRole
+
 			break
 		}
 	}
 
 	if targetRole == nil {
-		return v1alpha1.Pipeline{}, nil, fmt.Errorf("failed to find a target role with name %s: %w", p.TargetRoleName, unschedulableError)
+		return v1alpha1.Pipeline{}, nil, fmt.Errorf("failed to find a target role with name %s: %w", p.TargetRoleName, errUnschedulable)
 	}
 
 	var schemaFile *cue.File
@@ -599,7 +617,13 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(
 	}, schemaFile, nil
 }
 
-func (r *ProductDeploymentGeneratorReconciler) createSnapshot(ctx context.Context, obj *v1alpha1.ProductDeploymentGenerator, productDeployment *v1alpha1.ProductDeployment, component replicationv1.Component, dir string) (string, error) {
+func (r *ProductDeploymentGeneratorReconciler) createSnapshot(
+	ctx context.Context,
+	obj *v1alpha1.ProductDeploymentGenerator,
+	productDeployment *v1alpha1.ProductDeployment,
+	component replicationv1.Component,
+	dir string,
+) (string, error) {
 	serializer := json.NewSerializerWithOptions(json.DefaultMetaFactory, r.Scheme, r.Scheme, json.SerializerOptions{
 		Yaml:   true,
 		Pretty: true,
@@ -613,7 +637,7 @@ func (r *ProductDeploymentGeneratorReconciler) createSnapshot(ctx context.Contex
 
 	defer productDeploymentFile.Close()
 
-	if err := os.WriteFile(filepath.Join(dir, obj.Name, "kustomization.yaml"), []byte(kustomizationFile), 0o777); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, obj.Name, "kustomization.yaml"), []byte(kustomizationFile), v1alpha1.WritePermissions); err != nil {
 		return "", fmt.Errorf("failed to create kustomization file: %w", err)
 	}
 
@@ -662,7 +686,7 @@ func (r *ProductDeploymentGeneratorReconciler) increaseHeaders(instructions []by
 
 type headerTransformer struct{}
 
-func (t *headerTransformer) Transform(doc *ast.Document, reader text.Reader, pctx parser.Context) {
+func (t *headerTransformer) Transform(doc *ast.Document, _ text.Reader, _ parser.Context) {
 	_ = ast.Walk(doc, func(node ast.Node, enter bool) (ast.WalkStatus, error) {
 		if enter {
 			heading, ok := node.(*ast.Heading)
@@ -684,7 +708,7 @@ func (r *ProductDeploymentGeneratorReconciler) findGenerators(ctx context.Contex
 	selectorTerm := client.ObjectKeyFromObject(o).String()
 
 	generators := &v1alpha1.ProductDeploymentGeneratorList{}
-	if err := r.List(context.TODO(), generators, &client.ListOptions{
+	if err := r.List(ctx, generators, &client.ListOptions{
 		FieldSelector: fields.OneTermEqualSelector(sourceKey, selectorTerm),
 	}); err != nil {
 		return []reconcile.Request{}
@@ -706,10 +730,47 @@ func (r *ProductDeploymentGeneratorReconciler) findGenerators(ctx context.Contex
 
 // hashComponentVersion provides a small chunk of a hexadecimal format for a version.
 func (r *ProductDeploymentGeneratorReconciler) hashComponentVersion(version string) string {
-	h := sha1.New()
+	h := sha1.New() //nolint:gosec // good enough for our purposes
 	h.Write([]byte(version))
 
 	return hex.EncodeToString(h.Sum(nil))[:8]
+}
+
+func (r *ProductDeploymentGeneratorReconciler) shouldRun(
+	obj *v1alpha1.ProductDeploymentGenerator,
+	subscription *replicationv1.ComponentSubscription,
+) (bool, error) {
+	if !conditions.IsReady(subscription) {
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.ComponentSubscriptionNotReadyReason, "component subscription not ready yet")
+
+		return false, nil
+	}
+
+	if obj.Status.LastReconciledVersion == "" {
+		return true, nil
+	}
+
+	lastReconciledGeneratorVersion, err := semver.NewVersion(obj.Status.LastReconciledVersion)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.SemverParseFailedReason, err.Error())
+
+		return false, fmt.Errorf("failed to parse last reconciled version: %w", err)
+	}
+
+	lastReconciledSubscription, err := semver.NewVersion(subscription.Status.LastAppliedVersion)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, obj, v1alpha1.SemverParseFailedReason, err.Error())
+
+		return false, fmt.Errorf("failed to parse last reconciled version: %w", err)
+	}
+
+	if lastReconciledSubscription.Equal(lastReconciledGeneratorVersion) || lastReconciledSubscription.LessThan(lastReconciledGeneratorVersion) {
+		status.MarkReady(r.EventRecorder, obj, "Reconciliation success")
+
+		return false, nil
+	}
+
+	return true, nil
 }
 
 // fetchExistingConfigFile gathers existing config.cue values. If it doesn't exist it returns an empty file and no error.

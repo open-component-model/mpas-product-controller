@@ -47,6 +47,7 @@ func New(name, filepath string, src any) (*File, error) {
 	if err != nil {
 		return nil, fmt.Errorf(fmt.Errorf("failed to parse cue file: %w", err).Error())
 	}
+
 	return &File{
 		Name: name,
 		ctx:  ctx,
@@ -66,6 +67,7 @@ func (f *File) SchemaVersion() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	return f.schemaVersion, nil
 }
 
@@ -76,6 +78,7 @@ func (f *File) Comments() string {
 	for _, s := range f.file.Comments() {
 		comments += s.Text()
 	}
+
 	return comments
 }
 
@@ -89,6 +92,7 @@ func (f *File) value() cue.Value {
 	}
 	v := f.ctx.BuildFile(f.file)
 	f.v = v
+
 	return f.v
 }
 
@@ -99,7 +103,7 @@ func (f *File) deltaFrom(file *ast.File) cue.Value {
 // EvalWithoutPrivateFields evaluates the cue file and removes any private fields.
 // note: calling Eval() after Eval() EvalWithoutPrivateFields() will add the private fields back
 // while removing the attributes.
-func (f *File) EvalWithoutPrivateFields() *File {
+func (f *File) EvalWithoutPrivateFields() (*File, error) {
 	ctx := cuecontext.New()
 	syn := []cue.Option{
 		cue.Final(),
@@ -109,25 +113,16 @@ func (f *File) EvalWithoutPrivateFields() *File {
 		cue.ErrorsAsValues(false),
 	}
 
-	f = eval(f, syn)
+	var err error
+	f, err = eval(f, syn)
+	if err != nil {
+		return nil, err
+	}
 	removePrivateFields(&f.file.Decls)
 	f.v = ctx.BuildFile(f.file)
 	f.setComments(f.v.Doc())
-	return f
-}
 
-func containsPrivateFields(values []ast.Decl) bool {
-	for _, decl := range values {
-		if f, ok := decl.(*ast.Field); ok {
-			if len(f.Attrs) > 0 && f.Attrs[0].Text == "@private(true)" {
-				return true
-			}
-			if val, ok := f.Value.(*ast.StructLit); ok {
-				return containsPrivateFields(val.Elts)
-			}
-		}
-	}
-	return false
+	return f, nil
 }
 
 func removePrivateFields(values *[]ast.Decl) {
@@ -176,7 +171,7 @@ func (f *File) Merge(schema *File, parents ...cue.Selector) (*File, error) {
 		return nil, err
 	}
 
-	return Export(f.Name, v), nil
+	return Export(f.Name, v)
 }
 
 // Sanitize makes sure the cue file is well formed.
@@ -190,6 +185,7 @@ func (f *File) Validate(schema *File) error {
 	if err != nil {
 		return err
 	}
+
 	return unified.Vet()
 }
 
@@ -200,12 +196,15 @@ func (f *File) Unify(files []*File) (*File, error) {
 	for _, file := range files {
 		v = unify(v, file.value())
 	}
-	opts := append(defaultOpts, cue.Concrete(false))
+	opts := defaultOpts
+	opts = append(opts, cue.Concrete(false))
+
 	err := v.Validate(opts...)
 	if err != nil {
 		return nil, err
 	}
-	return Export(f.Name, v), nil
+
+	return Export(f.Name, v)
 }
 
 func unify(v1, v2 cue.Value) cue.Value {
@@ -229,13 +228,14 @@ func (f *File) Yaml() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return buf.Bytes(), nil
 }
 
 // Eval evaluates the cue file.
 // It expects the cue file to be well formed.
 // Optional fields and attributes are removed.
-func (f *File) Eval() *File {
+func (f *File) Eval() (*File, error) {
 	syn := []cue.Option{
 		cue.Final(),
 		cue.Definitions(true),
@@ -249,19 +249,23 @@ func (f *File) Eval() *File {
 
 // eval evaluates the cue file.
 // It modifies the cue file in place.
-func eval(f *File, syn []cue.Option) *File {
+func eval(f *File, syn []cue.Option) (*File, error) {
 	v := f.value()
 	node := v.Syntax(syn...)
-	newfile := &ast.File{
+	lit, ok := node.(*ast.StructLit)
+	if !ok {
+		return nil, fmt.Errorf("node is of unknown type %T", lit)
+	}
+	newFile := &ast.File{
 		Filename: f.file.Filename,
-		Decls:    node.(*ast.StructLit).Elts,
+		Decls:    lit.Elts,
 	}
 
-	f.file = newfile
-	f.v = f.ctx.BuildFile(newfile)
+	f.file = newFile
+	f.v = f.ctx.BuildFile(newFile)
 	f.setComments(v.Doc())
 
-	return f
+	return f, nil
 }
 
 // Vet validates the cue file.
@@ -283,32 +287,40 @@ func (f *File) Vet() error {
 			return fmt.Errorf("failed: %w", err)
 		}
 	}
+
 	return nil
 }
 
 // Export exports the cue value to a cue file.
-func Export(name string, v cue.Value, opts ...cue.Option) *File {
+func Export(name string, v cue.Value, opts ...cue.Option) (*File, error) {
 	opts = append(defaultOpts, opts...)
 	ctx := cuecontext.New()
+	lit, ok := v.Syntax(opts...).(*ast.StructLit)
+	if !ok {
+		return nil, fmt.Errorf("syntax was of unknown type %T", lit)
+	}
+
 	file := &File{
 		Name: name,
 		ctx:  ctx,
 		file: &ast.File{
-			Decls: v.Syntax(opts...).(*ast.StructLit).Elts,
+			Decls: lit.Elts,
 		},
 		v: v,
 	}
 	file.setComments(v.Doc())
-	return file
+
+	return file, nil
 }
 
 // src must be a string, []byte, or io.Reader.
 // if src is nil, the file is read from filepath.
-func parse(ctx *cue.Context, filepath string, src any) (*ast.File, error) {
+func parse(_ *cue.Context, filepath string, src any) (*ast.File, error) {
 	tree, err := parser.ParseFile(filepath, src, parser.ParseComments)
 	if err != nil {
 		return nil, err
 	}
+
 	return tree, nil
 }
 
@@ -320,15 +332,16 @@ func fieldsDelta(schema, data cue.Value, opts []cue.Option, parents ...cue.Selec
 	}
 
 	for iter.Next() {
-		sel := append(parents, iter.Selector())
+		sel := parents
+		sel = append(sel, iter.Selector())
 		// we need the absolute path to the field for lookup
 		// but only the relative path to the field for m (missing fields)
 		// as it will be appended to a list containing parent selectors
 		absPath := cue.MakePath(sel...)
 		relPath := cue.MakePath(append([]cue.Selector{}, iter.Selector())...)
 
-		//skip private fields based on the private attribute
-		//e.g. @private(true)
+		// skip private fields based on the private attribute
+		// e.g. @private(true).
 		attr := iter.Value().Attribute(privateAttr)
 		if err := attr.Err(); err == nil {
 			continue
@@ -339,7 +352,7 @@ func fieldsDelta(schema, data cue.Value, opts []cue.Option, parents ...cue.Selec
 			m = append(m, relPath)
 		}
 
-		switch iter.Value().Syntax().(type) {
+		switch iter.Value().Syntax().(type) { //nolint:gocritic // I like it this way.
 		case *ast.StructLit:
 			// recurse into the struct
 			// to find missing fields
@@ -351,7 +364,8 @@ func fieldsDelta(schema, data cue.Value, opts []cue.Option, parents ...cue.Selec
 
 			// restore the selector prefix to the path
 			for _, nv := range n {
-				nsel := append(sel[:], nv.Selectors()...)
+				nsel := sel
+				nsel = append(nsel, nv.Selectors()...)
 				m = append(m, cue.MakePath(nsel...))
 			}
 		}
@@ -370,6 +384,7 @@ func generateDefaults(input cue.Value, fields []cue.Path, schemaVersion string) 
 	for _, p := range fields {
 		paths = append(paths, p.String())
 	}
+
 	return makeValues(f, paths, schemaVersion)
 }
 
@@ -378,7 +393,8 @@ func makeValues(iter *cue.Iterator, paths []string, schemaVersion string, parent
 	for iter.Next() {
 		var v ast.Expr
 		value := iter.Value()
-		sel := append(parents, iter.Selector())
+		sel := parents
+		sel = append(sel, iter.Selector())
 		path := cue.MakePath(sel...)
 
 		if !slices.Contains(paths, path.String()) {
@@ -388,7 +404,7 @@ func makeValues(iter *cue.Iterator, paths []string, schemaVersion string, parent
 		field, hasDefaultValue := value.Default()
 
 		if !hasDefaultValue && value.IsConcrete() {
-			switch value.Syntax(cue.Raw()).(type) {
+			switch t := value.Syntax(cue.Raw()).(type) {
 			case *ast.StructLit:
 				var rx []ast.Decl
 				f, err := value.Fields(defaultOpts...)
@@ -402,11 +418,17 @@ func makeValues(iter *cue.Iterator, paths []string, schemaVersion string, parent
 				v = &ast.StructLit{
 					Elts: rx,
 				}
+			case ast.Expr:
+				v = t
 			default:
-				v = field.Syntax(cue.Raw()).(ast.Expr)
+				return nil, fmt.Errorf("unknown type: %T", t)
 			}
 		} else {
-			v = field.Syntax(cue.Raw()).(ast.Expr)
+			t, ok := field.Syntax(cue.Raw()).(ast.Expr)
+			if !ok {
+				return nil, fmt.Errorf("unknown type: %T", field.Syntax(cue.Raw()))
+			}
+			v = t
 		}
 
 		label, _ := value.Label()
@@ -439,5 +461,6 @@ func makeValues(iter *cue.Iterator, paths []string, schemaVersion string, parent
 		ast.SetComments(f, value.Doc())
 		result = append(result, f)
 	}
+
 	return result, nil
 }

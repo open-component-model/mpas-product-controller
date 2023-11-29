@@ -11,7 +11,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ProductDeploymentGeneratorSpec defines the desired state of ProductDeploymentGenerator
+// ProductDeploymentGeneratorSpec defines the desired state of ProductDeploymentGenerator.
 type ProductDeploymentGeneratorSpec struct {
 	// Interval is the reconciliation interval, i.e. at what interval shall a reconciliation happen.
 	// This is used to requeue objects for reconciliation in case the related subscription hasn't been finished yet.
@@ -31,7 +31,7 @@ type ProductDeploymentGeneratorSpec struct {
 	ServiceAccountName string `json:"serviceAccountName"`
 }
 
-// ProductDeploymentGeneratorStatus defines the observed state of ProductDeploymentGenerator
+// ProductDeploymentGeneratorStatus defines the observed state of ProductDeploymentGenerator.
 type ProductDeploymentGeneratorStatus struct {
 	// ObservedGeneration is the last reconciled generation.
 	// +optional
@@ -53,12 +53,12 @@ type ProductDeploymentGeneratorStatus struct {
 	LastReconciledVersion string `json:"lastReconciledVersion,omitempty"`
 }
 
-// GetSnapshotDigest returns the latest snapshot digest for the localization
+// GetSnapshotDigest returns the latest snapshot digest for the localization.
 func (in ProductDeploymentGenerator) GetSnapshotDigest() string {
 	return in.Status.LatestSnapshotDigest
 }
 
-// GetSnapshotName returns the key for the snapshot produced by the Localization
+// GetSnapshotName returns the key for the snapshot produced by the Localization.
 func (in ProductDeploymentGenerator) GetSnapshotName() string {
 	return in.Status.SnapshotName
 }
@@ -93,7 +93,7 @@ func (in *ProductDeploymentGenerator) SetObservedGeneration(v int64) {
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// ProductDeploymentGenerator is the Schema for the productdeploymentgenerators API
+// ProductDeploymentGenerator is the Schema for the productdeploymentgenerators API.
 type ProductDeploymentGenerator struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -104,7 +104,7 @@ type ProductDeploymentGenerator struct {
 
 //+kubebuilder:object:root=true
 
-// ProductDeploymentGeneratorList contains a list of ProductDeploymentGenerator
+// ProductDeploymentGeneratorList contains a list of ProductDeploymentGenerator.
 type ProductDeploymentGeneratorList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

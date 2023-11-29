@@ -19,13 +19,15 @@ func FetchGitRepositoryFromProjectInventory(project *projectv1.Project) (string,
 	var repoName, repoNamespace string
 	for _, e := range project.Status.Inventory.Entries {
 		split := strings.Split(e.ID, "_")
-		if len(split) < 2 {
+		splitLength := 2
+		if len(split) < splitLength {
 			return "", "", fmt.Errorf("failed to split ID: %s", e.ID)
 		}
 
 		if split[len(split)-1] == v1.GitRepositoryKind {
 			repoName = split[1]
 			repoNamespace = split[0]
+
 			break
 		}
 	}

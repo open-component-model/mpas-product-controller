@@ -19,7 +19,7 @@ spec:
     schema:
       openAPIV3Schema:
         description: ProductDeploymentPipeline is the Schema for the productdeploymentpipelines
-          API
+          API.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -35,7 +35,7 @@ spec:
             type: object
           spec:
             description: ProductDeploymentPipelineSpec defines the desired state of
-              ProductDeploymentPipeline
+              ProductDeploymentPipeline.
             properties:
               componentVersionRef:
                 description: ComponentVersionRef is the name of the generated component
@@ -273,7 +273,7 @@ spec:
             type: object
           status:
             description: ProductDeploymentPipelineStatus defines the observed state
-              of ProductDeploymentPipeline
+              of ProductDeploymentPipeline.
             properties:
               conditions:
                 items:
