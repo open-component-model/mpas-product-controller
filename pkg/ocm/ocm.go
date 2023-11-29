@@ -68,7 +68,7 @@ func (c *Client) CreateAuthenticatedOCMContext(ctx context.Context, serviceAccou
 func (c *Client) configureServiceAccountAccess(ctx context.Context, octx ocm.Context, serviceAccountName, namespace string) error {
 	logger := log.FromContext(ctx)
 
-	logger.V(4).Info("configuring service account credentials")
+	logger.V(v1alpha1.LevelDebug).Info("configuring service account credentials")
 	account := &corev1.ServiceAccount{}
 	if err := c.client.Get(ctx, types.NamespacedName{
 		Name:      serviceAccountName,
@@ -77,7 +77,7 @@ func (c *Client) configureServiceAccountAccess(ctx context.Context, octx ocm.Con
 		return fmt.Errorf("failed to fetch service account: %w", err)
 	}
 
-	logger.V(4).Info("got service account", "name", account.GetName())
+	logger.V(v1alpha1.LevelDebug).Info("got service account", "name", account.GetName())
 
 	for _, imagePullSecret := range account.ImagePullSecrets {
 		secret := &corev1.Secret{}
@@ -105,7 +105,7 @@ func (c *Client) configureServiceAccountAccess(ctx context.Context, octx ocm.Con
 }
 
 // GetComponentVersion returns a component Version. It's the caller's responsibility to clean it up and close the component Version once done with it.
-func (c *Client) GetComponentVersion(ctx context.Context, octx ocm.Context, url, name, version string) (ocm.ComponentVersionAccess, error) {
+func (c *Client) GetComponentVersion(_ context.Context, octx ocm.Context, url, name, version string) (ocm.ComponentVersionAccess, error) {
 	repoSpec := ocireg.NewRepositorySpec(url, nil)
 	repo, err := octx.RepositoryForSpec(repoSpec)
 	if err != nil {
@@ -121,11 +121,10 @@ func (c *Client) GetComponentVersion(ctx context.Context, octx ocm.Context, url,
 	return cv, nil
 }
 
-func (c *Client) GetProductDescription(ctx context.Context, octx ocm.Context, cv ocm.ComponentVersionAccess) ([]byte, error) {
+func (c *Client) GetProductDescription(_ context.Context, _ ocm.Context, cv ocm.ComponentVersionAccess) ([]byte, error) {
 	resources, err := cv.GetResourcesByResourceSelectors(compdesc.ResourceSelectorFunc(func(obj compdesc.ResourceSelectionContext) (bool, error) {
 		return obj.GetType() == ProductDescriptionType, nil
 	}))
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to get resource by selector: %w", err)
 	}
@@ -165,7 +164,17 @@ func (c *Client) GetResourceData(ctx context.Context, cv ocm.ComponentVersionAcc
 	identities = append(identities, ref.ReferencePath...)
 
 	identity := ocmmetav1.NewIdentity(ref.Name)
-	logger.V(4).Info("looking for resource data", "resource", ref.Name, "version", ref.Version, "identities", identities, "identity", identity)
+	logger.V(v1alpha1.LevelDebug).Info(
+		"looking for resource data",
+		"resource",
+		ref.Name,
+		"version",
+		ref.Version,
+		"identities",
+		identities,
+		"identity",
+		identity,
+	)
 
 	res, _, err := utils.ResolveResourceReference(cv, ocmmetav1.NewNestedResourceRef(identity, identities), cv.Repository())
 	if err != nil {

@@ -28,8 +28,12 @@ import (
 
 	mpasv1alpha1 "github.com/open-component-model/mpas-product-controller/api/v1alpha1"
 	mpasocm "github.com/open-component-model/mpas-product-controller/pkg/ocm"
-	projectv1 "github.com/open-component-model/mpas-project-controller/api/v1alpha1"
 	ocmv1alpha1 "github.com/open-component-model/ocm-controller/api/v1alpha1"
+)
+
+const (
+	defaultPipelineRequeue = 10 * time.Minute
+	quickRequeue           = 10 * time.Second
 )
 
 // ProductDeploymentPipelineReconciler reconciles a ProductDeploymentPipeline object.
@@ -112,15 +116,8 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 
 	snapshotProvider = localization
 
-	project, err := GetProjectFromObjectNamespace(ctx, r.Client, owner, r.MpasSystemNamespace)
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, obj, mpasv1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to find the project in the namespace: %w", err)
-	}
-
 	// Create Configuration
-	configuration, err := r.createOrUpdateConfiguration(ctx, obj, owner, localization, project)
+	configuration, err := r.createOrUpdateConfiguration(ctx, obj, localization)
 	if err != nil {
 		err := fmt.Errorf("failed to create configuration: %w", err)
 		status.MarkNotReady(r.EventRecorder, obj, mpasv1alpha1.CreateConfigurationFailedReason, err.Error())
@@ -142,7 +139,7 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 	if snapshotProvider.GetSnapshotName() == "" {
 		logger.Info("snapshot hasn't been produced yet, requeuing pipeline", "pipeline", obj.Name)
 
-		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: quickRequeue}, nil
 	}
 
 	obj.Status.SnapshotRef = &meta.NamespacedObjectReference{
@@ -158,9 +155,7 @@ func (r *ProductDeploymentPipelineReconciler) Reconcile(ctx context.Context, req
 func (r *ProductDeploymentPipelineReconciler) createOrUpdateConfiguration(
 	ctx context.Context,
 	obj *mpasv1alpha1.ProductDeploymentPipeline,
-	owner *mpasv1alpha1.ProductDeployment,
 	localization *ocmv1alpha1.Localization,
-	project *projectv1.Project,
 ) (*ocmv1alpha1.Configuration, error) {
 	if obj.Spec.Configuration.Rules.Name == "" {
 		return nil, nil
@@ -188,7 +183,7 @@ func (r *ProductDeploymentPipelineReconciler) createOrUpdateConfiguration(
 	}
 
 	spec := ocmv1alpha1.MutationSpec{
-		Interval:  metav1.Duration{Duration: 10 * time.Minute},
+		Interval:  metav1.Duration{Duration: defaultPipelineRequeue},
 		SourceRef: source,
 		ConfigRef: &ocmv1alpha1.ObjectReference{
 			NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
@@ -204,6 +199,7 @@ func (r *ProductDeploymentPipelineReconciler) createOrUpdateConfiguration(
 					Name: obj.Spec.ConfigMapRef,
 				},
 				Key: "values.yaml",
+				//nolint:godox // yep
 				// TODO: This means that's its a must have in the config.cue file
 				// Reflect this in the cue file
 				SubPath: obj.Name,
@@ -225,15 +221,18 @@ func (r *ProductDeploymentPipelineReconciler) createOrUpdateConfiguration(
 			}
 		}
 
-		if configuration.Spec.SourceRef.ResourceRef == nil || configuration.Spec.SourceRef.ResourceRef.Name != spec.SourceRef.ResourceRef.Name {
+		if configuration.Spec.SourceRef.ResourceRef == nil ||
+			configuration.Spec.SourceRef.ResourceRef.Name != spec.SourceRef.ResourceRef.Name {
 			configuration.Spec = spec
 		}
 
-		if configuration.Spec.ConfigRef.ResourceRef == nil || configuration.Spec.ConfigRef.ResourceRef.Name != spec.ConfigRef.ResourceRef.Name {
+		if configuration.Spec.ConfigRef.ResourceRef == nil ||
+			configuration.Spec.ConfigRef.ResourceRef.Name != spec.ConfigRef.ResourceRef.Name {
 			configuration.Spec = spec
 		}
 
-		if configuration.Spec.ValuesFrom.ConfigMapSource == nil || configuration.Spec.ValuesFrom.ConfigMapSource.SourceRef.Name != spec.ValuesFrom.ConfigMapSource.SourceRef.Name {
+		if configuration.Spec.ValuesFrom.ConfigMapSource == nil ||
+			configuration.Spec.ValuesFrom.ConfigMapSource.SourceRef.Name != spec.ValuesFrom.ConfigMapSource.SourceRef.Name {
 			configuration.Spec = spec
 		}
 
@@ -245,7 +244,10 @@ func (r *ProductDeploymentPipelineReconciler) createOrUpdateConfiguration(
 	return configuration, nil
 }
 
-func (r *ProductDeploymentPipelineReconciler) createOrUpdateLocalization(ctx context.Context, obj *mpasv1alpha1.ProductDeploymentPipeline) (*ocmv1alpha1.Localization, error) {
+func (r *ProductDeploymentPipelineReconciler) createOrUpdateLocalization(
+	ctx context.Context,
+	obj *mpasv1alpha1.ProductDeploymentPipeline,
+) (*ocmv1alpha1.Localization, error) {
 	if obj.Spec.Localization.Name == "" {
 		return nil, nil
 	}
@@ -259,7 +261,7 @@ func (r *ProductDeploymentPipelineReconciler) createOrUpdateLocalization(ctx con
 			Namespace: obj.Namespace,
 		},
 		Spec: ocmv1alpha1.MutationSpec{
-			Interval: metav1.Duration{Duration: 10 * time.Minute},
+			Interval: metav1.Duration{Duration: defaultPipelineRequeue},
 			SourceRef: ocmv1alpha1.ObjectReference{
 				NamespacedObjectKindReference: meta.NamespacedObjectKindReference{
 					Kind:      "ComponentVersion",

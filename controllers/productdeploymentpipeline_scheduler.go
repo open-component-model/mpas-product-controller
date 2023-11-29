@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	eventv1 "github.com/fluxcd/pkg/apis/event/v1beta1"
 	"github.com/fluxcd/pkg/apis/meta"
@@ -69,7 +68,7 @@ func (r *ProductDeploymentPipelineScheduler) Reconcile(ctx context.Context, req 
 	if obj.Status.SnapshotRef == nil || obj.Status.SnapshotRef.Name == "" {
 		logger.Info("snapshot has not yet been set up, requeuing...")
 
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: defaultValidationRequeue}, nil
 	}
 
 	snapshot := &v1alpha1.Snapshot{}
@@ -77,7 +76,7 @@ func (r *ProductDeploymentPipelineScheduler) Reconcile(ctx context.Context, req 
 		if apierrors.IsNotFound(err) {
 			logger.Info("snapshot not found yet, requeuing")
 
-			return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+			return ctrl.Result{RequeueAfter: defaultValidationRequeue}, nil
 		}
 
 		return ctrl.Result{}, fmt.Errorf("failed to retrieve snapshot object: %w", err)
@@ -86,7 +85,7 @@ func (r *ProductDeploymentPipelineScheduler) Reconcile(ctx context.Context, req 
 	if !conditions.IsTrue(snapshot, meta.ReadyCondition) {
 		logger.Info("snapshot found but is not ready yet, requeuing...")
 
-		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: defaultValidationRequeue}, nil
 	}
 
 	patchHelper := patch.NewSerialPatcher(obj, r.Client)

@@ -9,7 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ProductDeploymentPipelineSpec defines the desired state of ProductDeploymentPipeline
+// ProductDeploymentPipelineSpec defines the desired state of ProductDeploymentPipeline.
 type ProductDeploymentPipelineSpec struct {
 	// ComponentVersionRef is the name of the generated component version object.
 	// +required
@@ -29,7 +29,7 @@ type ProductDeploymentPipelineSpec struct {
 	TargetRef meta.NamespacedObjectReference `json:"targetRef"`
 }
 
-// ProductDeploymentPipelineStatus defines the observed state of ProductDeploymentPipeline
+// ProductDeploymentPipelineStatus defines the observed state of ProductDeploymentPipeline.
 type ProductDeploymentPipelineStatus struct {
 	// ObservedGeneration is the last reconciled generation.
 	// +optional
@@ -84,13 +84,14 @@ func (in *ProductDeploymentPipeline) Equals(spec ProductDeploymentPipelineSpec) 
 	case in.Spec.ConfigMapRef != spec.ConfigMapRef:
 		return false
 	}
+
 	return true
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 
-// ProductDeploymentPipeline is the Schema for the productdeploymentpipelines API
+// ProductDeploymentPipeline is the Schema for the productdeploymentpipelines API.
 type ProductDeploymentPipeline struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -101,7 +102,7 @@ type ProductDeploymentPipeline struct {
 
 //+kubebuilder:object:root=true
 
-// ProductDeploymentPipelineList contains a list of ProductDeploymentPipeline
+// ProductDeploymentPipelineList contains a list of ProductDeploymentPipeline.
 type ProductDeploymentPipelineList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`

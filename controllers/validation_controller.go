@@ -36,7 +36,9 @@ import (
 	"github.com/open-component-model/mpas-product-controller/pkg/validators"
 )
 
-// ValidationReconciler reconciles a Validation object
+const defaultValidationRequeue = 5 * time.Second
+
+// ValidationReconciler reconciles a Validation object.
 type ValidationReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
@@ -48,19 +50,28 @@ type ValidationReconciler struct {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ValidationReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &sourcebeta2.GitRepository{}, controllerMetadataKey, func(rawObj client.Object) []string {
-		repository := rawObj.(*sourcebeta2.GitRepository)
-		owner := metav1.GetControllerOf(repository)
-		if owner == nil {
-			return nil
-		}
+	if err := mgr.GetFieldIndexer().IndexField(
+		context.Background(),
+		&sourcebeta2.GitRepository{},
+		controllerMetadataKey,
+		func(rawObj client.Object) []string {
+			repository, ok := rawObj.(*sourcebeta2.GitRepository)
+			if !ok {
+				return nil
+			}
 
-		if owner.APIVersion != mpasv1alpha1.GroupVersion.String() || owner.Kind != "Validation" {
-			return nil
-		}
+			owner := metav1.GetControllerOf(repository)
+			if owner == nil {
+				return nil
+			}
 
-		return []string{owner.Name}
-	}); err != nil {
+			if owner.APIVersion != mpasv1alpha1.GroupVersion.String() || owner.Kind != "Validation" {
+				return nil
+			}
+
+			return []string{owner.Name}
+		},
+	); err != nil {
 		return err
 	}
 
@@ -90,7 +101,7 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, fmt.Errorf("failed to retrieve validation object: %w", err)
 	}
 
-	logger.V(4).Info("reconciling the validation", "status", obj.Status)
+	logger.V(mpasv1alpha1.LevelDebug).Info("reconciling the validation", "status", obj.Status)
 
 	objPatcher := patch.NewSerialPatcher(obj, r.Client)
 
@@ -116,93 +127,19 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, fmt.Errorf("expected one owner, got: %d", len(owners))
 	}
 
-	sync := &gitv1alpha1.Sync{}
-	if err := r.Get(ctx, types.NamespacedName{Name: obj.Spec.SyncRef.Name, Namespace: obj.Spec.SyncRef.Namespace}, sync); err != nil {
-		if apierrors.IsNotFound(err) {
-			return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
-		}
+	// These will be outputs of the below should run method.
+	var (
+		sync          = &gitv1alpha1.Sync{}
+		repository    = &gitmpasv1alpha1.Repository{}
+		gitRepository = &sourcebeta2.GitRepository{}
+	)
 
-		return ctrl.Result{}, fmt.Errorf("failed to get owner object: %w", err)
-	}
-
-	if !conditions.IsReady(sync) || sync.Status.PullRequestID == 0 {
-		logger.Info("sync request isn't done yet... waiting")
-
-		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
-	}
-
-	project, err := GetProjectFromObjectNamespace(ctx, r.Client, sync, r.MpasSystemNamespace)
+	run, result, err := r.shouldRun(ctx, owners, obj, sync, repository, gitRepository)
 	if err != nil {
-		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
-		status.MarkNotReady(r.EventRecorder, obj, mpasv1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to find the project in the namespace: %w", err)
-	}
-
-	if !conditions.IsReady(project) {
-		logger.Info("project not ready yet")
-
-		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
-	}
-
-	if project.Status.RepositoryRef == nil {
-		logger.Info("no repository information is provided yet")
-
-		return ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
-	}
-
-	repository := &gitmpasv1alpha1.Repository{}
-	if err := r.Get(ctx, types.NamespacedName{
-		Name:      project.Status.RepositoryRef.Name,
-		Namespace: project.Status.RepositoryRef.Namespace,
-	}, repository); err != nil {
 		return ctrl.Result{}, err
 	}
-
-	if conditions.IsTrue(obj, meta.ReadyCondition) {
-		merged, err := r.Validator.IsMergedOrClosed(ctx, *repository, *sync)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to fetch pull request status: %w", err)
-		}
-
-		if merged {
-			logger.Info("validation pull request is merged/closed, removing git repository")
-			if err := r.deleteGitRepository(ctx, obj.Status.GitRepositoryRef); err != nil {
-				status.MarkNotReady(r.EventRecorder, obj, mpasv1alpha1.GitRepositoryCleanUpFailedReason, err.Error())
-
-				return ctrl.Result{}, fmt.Errorf("failed to delete GitRepository tracking the values file: %w", err)
-			}
-
-			// Stop reconciling this validation any further.
-			return ctrl.Result{}, nil
-		}
-	}
-
-	if obj.Status.GitRepositoryRef == nil {
-		logger.Info("creating git repository to track value changes")
-		// create gitrepository to track values file and immediately requeue
-		ref, err := r.createValueFileGitRepository(ctx, obj, owners[0].Name, sync.Status.PullRequestID, *repository)
-
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to create value tracking git repo: %w", err)
-		}
-
-		obj.Status.GitRepositoryRef = &ref
-
-		// This will requeue anyway, since we are watching GitRepository objects. One the GitRepository is IsReady
-		// it should requeue a run for this validation.
-		return ctrl.Result{}, nil
-	}
-
-	gitRepository := &sourcebeta2.GitRepository{}
-	if err := r.Get(ctx, types.NamespacedName{Name: obj.Status.GitRepositoryRef.Name, Namespace: obj.Status.GitRepositoryRef.Namespace}, gitRepository); err != nil {
-		if apierrors.IsNotFound(err) {
-			logger.Info("values file tracking gitrepository already removed")
-
-			return ctrl.Result{}, nil
-		}
-
-		return ctrl.Result{}, fmt.Errorf("failed to find values file tracking git repository: %w", err)
+	if !run {
+		return result, nil
 	}
 
 	artifact := gitRepository.GetArtifact()
@@ -228,23 +165,27 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	config, err := cue.New("config", "", data)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, obj, mpasv1alpha1.ValidationFailedReason, err.Error())
+
 		return ctrl.Result{}, fmt.Errorf("failed to generate schema: %w", err)
 	}
 
 	schema, err := cue.New("schema", "", obj.Spec.Schema)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, obj, mpasv1alpha1.ValidationFailedReason, err.Error())
+
 		return ctrl.Result{}, fmt.Errorf("failed to generate schema: %w", err)
 	}
 
 	err = config.Validate(schema)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, obj, mpasv1alpha1.ValidationFailedReason, err.Error())
+
 		return ctrl.Result{}, fmt.Errorf("failed to validate config: %w", err)
 	}
 
 	if err := r.Validator.PassValidation(ctx, *repository, *sync); err != nil {
 		status.MarkNotReady(r.EventRecorder, obj, mpasv1alpha1.ValidationFailedReason, err.Error())
+
 		return ctrl.Result{}, fmt.Errorf("failed to set pull request checks to success: %w", err)
 	}
 
@@ -256,7 +197,13 @@ func (r *ValidationReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 // createValueFileGitRepository creates a GitRepository that tracks changes on a branch.
-func (r *ValidationReconciler) createValueFileGitRepository(ctx context.Context, obj *mpasv1alpha1.Validation, productName string, pullId int, repository gitmpasv1alpha1.Repository) (meta.NamespacedObjectReference, error) {
+func (r *ValidationReconciler) createValueFileGitRepository(
+	ctx context.Context,
+	obj *mpasv1alpha1.Validation,
+	productName string,
+	pullID int,
+	repository gitmpasv1alpha1.Repository,
+) (meta.NamespacedObjectReference, error) {
 	repo := &sourcebeta2.GitRepository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      obj.Name + "-values-repo",
@@ -267,9 +214,9 @@ func (r *ValidationReconciler) createValueFileGitRepository(ctx context.Context,
 			SecretRef: &meta.LocalObjectReference{
 				Name: repository.Spec.Credentials.SecretRef.Name,
 			},
-			Interval: metav1.Duration{Duration: 5 * time.Second},
+			Interval: metav1.Duration{Duration: defaultValidationRequeue},
 			Reference: &sourcebeta2.GitRepositoryRef{
-				Name: fmt.Sprintf("refs/pull/%d/head", pullId),
+				Name: fmt.Sprintf("refs/pull/%d/head", pullID),
 			},
 			Ignore: pointer.String(fmt.Sprintf(`# exclude all
 /*
@@ -311,4 +258,105 @@ func (r *ValidationReconciler) deleteGitRepository(ctx context.Context, ref *met
 	}
 
 	return r.Delete(ctx, repo)
+}
+
+func (r *ValidationReconciler) shouldRun(
+	ctx context.Context,
+	owners []metav1.OwnerReference,
+	obj *mpasv1alpha1.Validation,
+	sync *gitv1alpha1.Sync,
+	repository *gitmpasv1alpha1.Repository,
+	gitRepository *sourcebeta2.GitRepository,
+) (bool, ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+
+	if err := r.Get(ctx, types.NamespacedName{Name: obj.Spec.SyncRef.Name, Namespace: obj.Spec.SyncRef.Namespace}, sync); err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
+		}
+
+		return false, ctrl.Result{}, fmt.Errorf("failed to get owner object: %w", err)
+	}
+
+	if !conditions.IsReady(sync) || sync.Status.PullRequestID == 0 {
+		logger.Info("sync request isn't done yet... waiting")
+
+		return false, ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
+	}
+
+	project, err := GetProjectFromObjectNamespace(ctx, r.Client, sync, r.MpasSystemNamespace)
+	if err != nil {
+		conditions.MarkFalse(obj, meta.ReadyCondition, mpasv1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
+		status.MarkNotReady(r.EventRecorder, obj, mpasv1alpha1.ProjectInNamespaceGetFailedReason, err.Error())
+
+		return false, ctrl.Result{}, fmt.Errorf("failed to find the project in the namespace: %w", err)
+	}
+
+	if !conditions.IsReady(project) {
+		logger.Info("project not ready yet")
+
+		return false, ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
+	}
+
+	if project.Status.RepositoryRef == nil {
+		logger.Info("no repository information is provided yet")
+
+		return false, ctrl.Result{RequeueAfter: obj.GetRequeueAfter()}, nil
+	}
+
+	if err := r.Get(ctx, types.NamespacedName{
+		Name:      project.Status.RepositoryRef.Name,
+		Namespace: project.Status.RepositoryRef.Namespace,
+	}, repository); err != nil {
+		return false, ctrl.Result{}, err
+	}
+
+	if conditions.IsTrue(obj, meta.ReadyCondition) {
+		merged, err := r.Validator.IsMergedOrClosed(ctx, *repository, *sync)
+		if err != nil {
+			return false, ctrl.Result{}, fmt.Errorf("failed to fetch pull request status: %w", err)
+		}
+
+		if merged {
+			logger.Info("validation pull request is merged/closed, removing git repository")
+			if err := r.deleteGitRepository(ctx, obj.Status.GitRepositoryRef); err != nil {
+				status.MarkNotReady(r.EventRecorder, obj, mpasv1alpha1.GitRepositoryCleanUpFailedReason, err.Error())
+
+				return false, ctrl.Result{}, fmt.Errorf("failed to delete GitRepository tracking the values file: %w", err)
+			}
+
+			// Stop reconciling this validation any further.
+			return false, ctrl.Result{}, nil
+		}
+	}
+
+	if obj.Status.GitRepositoryRef == nil {
+		logger.Info("creating git repository to track value changes")
+		// create gitrepository to track values file and immediately requeue
+		ref, err := r.createValueFileGitRepository(ctx, obj, owners[0].Name, sync.Status.PullRequestID, *repository)
+		if err != nil {
+			return false, ctrl.Result{}, fmt.Errorf("failed to create value tracking git repo: %w", err)
+		}
+
+		obj.Status.GitRepositoryRef = &ref
+
+		// This will requeue anyway, since we are watching GitRepository objects. One the GitRepository is IsReady
+		// it should requeue a run for this validation.
+		return false, ctrl.Result{}, nil
+	}
+
+	if err := r.Get(ctx, types.NamespacedName{
+		Name:      obj.Status.GitRepositoryRef.Name,
+		Namespace: obj.Status.GitRepositoryRef.Namespace,
+	}, gitRepository); err != nil {
+		if apierrors.IsNotFound(err) {
+			logger.Info("values file tracking gitrepository already removed")
+
+			return false, ctrl.Result{}, nil
+		}
+
+		return false, ctrl.Result{}, fmt.Errorf("failed to find values file tracking git repository: %w", err)
+	}
+
+	return true, ctrl.Result{}, nil
 }

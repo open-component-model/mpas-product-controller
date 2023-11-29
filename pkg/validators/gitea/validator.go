@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"code.gitea.io/sdk/gitea"
+	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -128,10 +129,9 @@ func (v *Validator) createCheckRunStatus(ctx context.Context, repository gitv1al
 	}
 
 	sha := pr.Head.Sha
-	logger.V(4).Info("updating SHA", "sha", sha)
+	logger.V(v1alpha1.LevelDebug).Info("updating SHA", "sha", sha)
 	state, _, err := client.CreateStatus(repository.Spec.Owner, repository.Name, sha, gitea.CreateStatusOption{
-		State: status,
-		//TargetURL:   "",
+		State:       status,
 		Description: "MPAS Validation Check",
 		Context:     statusCheckName,
 	})
@@ -139,7 +139,8 @@ func (v *Validator) createCheckRunStatus(ctx context.Context, repository gitv1al
 		return fmt.Errorf("failed to create status for pr: %w", err)
 	}
 
-	logger.V(4).Info("status", "status", state.State, "id", state.ID, "context", state.Context)
+	logger.V(v1alpha1.LevelDebug).Info("status", "status", state.State, "id", state.ID, "context", state.Context)
+
 	return nil
 }
 

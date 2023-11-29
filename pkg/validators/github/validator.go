@@ -15,6 +15,7 @@ import (
 	deliveryv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
 	gitv1alpha1 "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
 
+	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
 	"github.com/open-component-model/mpas-product-controller/pkg/validators"
 )
 
@@ -83,7 +84,7 @@ func (v *Validator) IsMergedOrClosed(ctx context.Context, repository gitv1alpha1
 	}
 
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: string(token)})
-	tc := oauth2.NewClient(context.Background(), ts)
+	tc := oauth2.NewClient(ctx, ts)
 
 	g := ggithub.NewClient(tc)
 
@@ -93,6 +94,7 @@ func (v *Validator) IsMergedOrClosed(ctx context.Context, repository gitv1alpha1
 	}
 
 	done := pointer.BoolDeref(pr.Merged, false) || pr.ClosedAt != nil
+
 	return done, nil
 }
 
@@ -106,7 +108,7 @@ func (v *Validator) createCheckRunStatus(ctx context.Context, repository gitv1al
 	}
 
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: string(token)})
-	tc := oauth2.NewClient(context.Background(), ts)
+	tc := oauth2.NewClient(ctx, ts)
 
 	g := ggithub.NewClient(tc)
 
@@ -116,7 +118,7 @@ func (v *Validator) createCheckRunStatus(ctx context.Context, repository gitv1al
 	}
 
 	ref := *pr.Head.SHA
-	logger.V(4).Info("updating SHA", "sha", ref)
+	logger.V(v1alpha1.LevelDebug).Info("updating SHA", "sha", ref)
 	state, _, err := g.Repositories.CreateStatus(ctx, repository.Spec.Owner, repository.Name, ref, &ggithub.RepoStatus{
 		// State is the current state of the repository. Possible values are:
 		// pending, success, error, or failure.
@@ -128,7 +130,8 @@ func (v *Validator) createCheckRunStatus(ctx context.Context, repository gitv1al
 		return fmt.Errorf("failed to create status for pr: %w", err)
 	}
 
-	logger.V(4).Info("status", "status", *state.State, "id", *state.ID, "context", *state.Context)
+	logger.V(v1alpha1.LevelDebug).Info("status", "status", *state.State, "id", *state.ID, "context", *state.Context)
+
 	return nil
 }
 

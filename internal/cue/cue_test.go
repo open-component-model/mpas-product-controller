@@ -7,6 +7,7 @@ package cue
 import (
 	"testing"
 
+	"cuelang.org/go/cue/ast"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -131,8 +132,10 @@ redis_url!: string & =~ "^https://"
 	for _, tc := range testsCases {
 		t.Run(tc.name, func(t *testing.T) {
 			config := generateConfigFile(t, tc.config)
-			config = config.Eval()
-			err := config.Vet()
+			var err error
+			config, err = config.Eval()
+			require.NoError(t, err)
+			err = config.Vet()
 			if tc.wantedErr != nil {
 				err = tc.wantedErr(err)
 				require.NoError(t, err)
@@ -212,7 +215,8 @@ deployment: {
 			config := generateConfigFile(t, tc.config)
 			ok := containsPrivateFields(config.file.Decls)
 			assert.True(t, ok)
-			f2 := config.EvalWithoutPrivateFields()
+			f2, err := config.EvalWithoutPrivateFields()
+			require.NoError(t, err)
 
 			version, err := f2.SchemaVersion()
 			require.NoError(t, err)
@@ -223,6 +227,20 @@ deployment: {
 			tc.expected(t, form)
 		})
 	}
+}
+
+func containsPrivateFields(values []ast.Decl) bool {
+	for _, decl := range values {
+		if f, ok := decl.(*ast.Field); ok {
+			if len(f.Attrs) > 0 && f.Attrs[0].Text == "@private(true)" {
+				return true
+			}
+			if val, ok := f.Value.(*ast.StructLit); ok {
+				return containsPrivateFields(val.Elts)
+			}
+		}
+	}
+	return false
 }
 
 func TestCue_Merge(t *testing.T) {
