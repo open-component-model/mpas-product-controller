@@ -3,17 +3,17 @@ package gitea
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"code.gitea.io/sdk/gitea"
-	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
+	deliveryv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
+	gitv1alpha1 "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	deliveryv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
-	gitv1alpha1 "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
-
+	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
 	"github.com/open-component-model/mpas-product-controller/pkg/validators"
 )
 
@@ -88,7 +88,12 @@ func (v *Validator) IsMergedOrClosed(ctx context.Context, repository gitv1alpha1
 
 	domain := defaultDomain
 	if repository.Spec.Domain != "" {
-		domain = repository.Spec.Domain
+		u, err := v.parseDomainURL(repository.Spec.Domain, repository.Spec.Insecure)
+		if err != nil {
+			return false, fmt.Errorf("failed to parse repository url %s: %w", repository.Spec.Domain, err)
+		}
+
+		domain = u
 	}
 
 	client, err := gitea.NewClient(domain, gitea.SetToken(string(token)))
@@ -115,7 +120,12 @@ func (v *Validator) createCheckRunStatus(ctx context.Context, repository gitv1al
 
 	domain := defaultDomain
 	if repository.Spec.Domain != "" {
-		domain = repository.Spec.Domain
+		u, err := v.parseDomainURL(repository.Spec.Domain, repository.Spec.Insecure)
+		if err != nil {
+			return fmt.Errorf("failed to parse repository url %s: %w", repository.Spec.Domain, err)
+		}
+
+		domain = u
 	}
 
 	client, err := gitea.NewClient(domain, gitea.SetToken(string(token)))
@@ -159,4 +169,20 @@ func (v *Validator) retrieveAccessToken(ctx context.Context, obj gitv1alpha1.Rep
 	}
 
 	return token, nil
+}
+
+func (v *Validator) parseDomainURL(domain string, insecure bool) (string, error) {
+	u, err := url.Parse(domain)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse url: %w", err)
+	}
+
+	if u.Scheme == "" {
+		u.Scheme = "https"
+		if insecure {
+			u.Scheme = "http"
+		}
+	}
+
+	return u.String(), nil
 }
