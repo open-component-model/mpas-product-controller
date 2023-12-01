@@ -263,7 +263,7 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 		}
 	}()
 
-	sync, values, err := r.createSync(ctx, obj, *prodDesc, component, dir, cv, project)
+	sync, values, err := r.createSync(ctx, obj, *prodDesc, subscription, component, dir, cv, project)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -323,9 +323,11 @@ func (r *ProductDeploymentGeneratorReconciler) reconcile(ctx context.Context, ob
 	return ctrl.Result{}, nil
 }
 
-func (r *ProductDeploymentGeneratorReconciler) createSync(ctx context.Context,
+func (r *ProductDeploymentGeneratorReconciler) createSync(
+	ctx context.Context,
 	obj *v1alpha1.ProductDeploymentGenerator,
 	prodDesc v1alpha1.ProductDescription,
+	subscription *replicationv1.ComponentSubscription,
 	component replicationv1.Component,
 	dir string,
 	cv ocm.ComponentVersionAccess,
@@ -343,7 +345,7 @@ func (r *ProductDeploymentGeneratorReconciler) createSync(ctx context.Context,
 
 	productFolder := filepath.Join(dir, obj.Name)
 
-	productDeployment, values, err := r.createProductDeployment(ctx, obj, prodDesc, component, productFolder, cv, project)
+	productDeployment, values, err := r.createProductDeployment(ctx, obj, prodDesc, component, productFolder, cv, project, subscription)
 	if err != nil {
 		if errors.Is(err, errUnschedulable) {
 			status.MarkNotReady(r.EventRecorder, obj, v1alpha1.ProductPipelineSchedulingFailedReason, err.Error())
@@ -437,6 +439,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 	dir string,
 	cv ocm.ComponentVersionAccess,
 	project *projectv1.Project,
+	subscription *replicationv1.ComponentSubscription,
 ) (*v1alpha1.ProductDeployment, *cue.File, error) {
 	logger := log.FromContext(ctx)
 
@@ -455,6 +458,7 @@ func (r *ProductDeploymentGeneratorReconciler) createProductDeployment(
 		Component:          component,
 		ServiceAccountName: obj.Spec.ServiceAccountName,
 		Interval:           obj.Spec.Interval,
+		Verify:             subscription.Status.Signature,
 	}
 
 	var readme []byte

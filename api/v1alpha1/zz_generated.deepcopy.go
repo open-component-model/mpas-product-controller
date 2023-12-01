@@ -12,6 +12,7 @@ package v1alpha1
 import (
 	"github.com/fluxcd/pkg/apis/meta"
 	metav1 "github.com/open-component-model/ocm/pkg/contexts/ocm/compdesc/meta/v1"
+	apiv1alpha1 "github.com/open-component-model/replication-controller/api/v1alpha1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
@@ -377,6 +378,13 @@ func (in *ProductDeploymentSpec) DeepCopyInto(out *ProductDeploymentSpec) {
 		in, out := &in.Schema, &out.Schema
 		*out = make([]byte, len(*in))
 		copy(*out, *in)
+	}
+	if in.Verify != nil {
+		in, out := &in.Verify, &out.Verify
+		*out = make([]apiv1alpha1.Signature, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 }
 
