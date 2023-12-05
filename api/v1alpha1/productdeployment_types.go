@@ -32,6 +32,9 @@ type ProductDeploymentSpec struct {
 	Interval metav1.Duration `json:"interval"`
 	// +required
 	Schema []byte `json:"schema"`
+	// Verify defines signatures for the given component.
+	// +optional
+	Verify []ocmv1.Signature `json:"verify,omitempty"`
 }
 
 // ProductDeploymentStatus defines the observed state of ProductDeployment.

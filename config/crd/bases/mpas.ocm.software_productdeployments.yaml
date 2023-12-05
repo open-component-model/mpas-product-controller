@@ -289,6 +289,42 @@ spec:
                 type: string
               serviceAccountName:
                 type: string
+              verify:
+                description: Verify defines signatures for the given component.
+                items:
+                  description: Signature defines the details of a signature to use
+                    for verification.
+                  properties:
+                    name:
+                      description: Name specifies the name of the signature. An OCM
+                        component may have multiple signatures.
+                      type: string
+                    publicKey:
+                      description: PublicKey provides a reference to a Kubernetes
+                        Secret of contain a blob of a public key that which will be
+                        used to validate the named signature.
+                      properties:
+                        secretRef:
+                          description: SecretRef is a reference to a Secret that contains
+                            a public key.
+                          properties:
+                            name:
+                              description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                TODO: Add other useful fields. apiVersion, kind, uid?'
+                              type: string
+                          type: object
+                          x-kubernetes-map-type: atomic
+                        value:
+                          description: Value defines a PEM/base64 encoded public key
+                            value.
+                          format: byte
+                          type: string
+                      type: object
+                  required:
+                  - name
+                  - publicKey
+                  type: object
+                type: array
             required:
             - component
             - interval

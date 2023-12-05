@@ -310,6 +310,18 @@ func (r *ProductDeploymentReconciler) createOrUpdatedValuesConfigMap(
 }
 
 func (r *ProductDeploymentReconciler) createOrUpdateComponentVersion(ctx context.Context, obj *v1alpha1.ProductDeployment) error {
+	signature := make([]ocmv1alpha1.Signature, 0, len(obj.Spec.Verify))
+	for _, s := range obj.Spec.Verify {
+		sign := ocmv1alpha1.Signature{
+			Name: s.Name,
+			PublicKey: ocmv1alpha1.PublicKey{
+				SecretRef: s.PublicKey.SecretRef,
+				Value:     s.PublicKey.Value,
+			},
+		}
+		signature = append(signature, sign)
+	}
+
 	cv := &ocmv1alpha1.ComponentVersion{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      r.generateComponentVersionName(obj),
@@ -322,7 +334,7 @@ func (r *ProductDeploymentReconciler) createOrUpdateComponentVersion(ctx context
 			Repository: ocmv1alpha1.Repository{
 				URL: obj.Spec.Component.Registry.URL,
 			},
-			Verify: nil,
+			Verify: signature,
 			References: ocmv1alpha1.ReferencesConfig{
 				Expand: true,
 			},

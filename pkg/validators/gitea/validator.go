@@ -6,12 +6,13 @@ import (
 	"net/url"
 
 	"code.gitea.io/sdk/gitea"
-	deliveryv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
-	gitv1alpha1 "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	deliveryv1alpha1 "github.com/open-component-model/git-controller/apis/delivery/v1alpha1"
+	gitv1alpha1 "github.com/open-component-model/git-controller/apis/mpas/v1alpha1"
 
 	"github.com/open-component-model/mpas-product-controller/api/v1alpha1"
 	"github.com/open-component-model/mpas-product-controller/pkg/validators"
