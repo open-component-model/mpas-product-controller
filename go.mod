@@ -34,7 +34,7 @@ require (
 	github.com/open-component-model/git-controller v0.10.0
 	github.com/open-component-model/mpas-project-controller v0.2.0
 	github.com/open-component-model/ocm v0.4.0
-	github.com/open-component-model/ocm-controller v0.16.2-0.20231130185227-e932a75d6f6a
+	github.com/open-component-model/ocm-controller v0.17.0
 	github.com/open-component-model/replication-controller v0.11.0
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/stretchr/testify v1.8.4
