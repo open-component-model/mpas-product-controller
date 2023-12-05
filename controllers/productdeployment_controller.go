@@ -312,11 +312,14 @@ func (r *ProductDeploymentReconciler) createOrUpdatedValuesConfigMap(
 func (r *ProductDeploymentReconciler) createOrUpdateComponentVersion(ctx context.Context, obj *v1alpha1.ProductDeployment) error {
 	signature := make([]ocmv1alpha1.Signature, 0, len(obj.Spec.Verify))
 	for _, s := range obj.Spec.Verify {
-		signature = append(signature, ocmv1alpha1.Signature{
-			Name:          s.Name,
-			PublicKey:     ocmv1alpha1.SecretRef{SecretRef: s.PublicKey.SecretRef},
-			PublicKeyBlob: s.PublicKeyBlob,
-		})
+		sign := ocmv1alpha1.Signature{
+			Name: s.Name,
+			PublicKey: ocmv1alpha1.PublicKey{
+				SecretRef: s.PublicKey.SecretRef,
+				Value:     s.PublicKey.Value,
+			},
+		}
+		signature = append(signature, sign)
 	}
 
 	cv := &ocmv1alpha1.ComponentVersion{

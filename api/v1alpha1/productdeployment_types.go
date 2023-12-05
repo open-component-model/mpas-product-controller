@@ -34,7 +34,7 @@ type ProductDeploymentSpec struct {
 	Schema []byte `json:"schema"`
 	// Verify defines signatures for the given component.
 	// +optional
-	Verify []replicationv1.Signature `json:"verify,omitempty"`
+	Verify []ocmv1.Signature `json:"verify,omitempty"`
 }
 
 // ProductDeploymentStatus defines the observed state of ProductDeployment.
