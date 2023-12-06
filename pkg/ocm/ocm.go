@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/containers/image/v5/pkg/compression"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -112,6 +113,11 @@ func (c *Client) GetComponentVersion(_ context.Context, octx ocm.Context, url, n
 		return nil, fmt.Errorf("failed to get repository for spec: %w", err)
 	}
 	defer repo.Close()
+
+	// ocm library panics if the version is invalid
+	if _, err := semver.NewVersion(version); err != nil {
+		return nil, fmt.Errorf("version %q is invalid: %w", version, err)
+	}
 
 	cv, err := repo.LookupComponentVersion(name, version)
 	if err != nil {
