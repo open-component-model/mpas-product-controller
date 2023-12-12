@@ -31,7 +31,7 @@ require (
 	github.com/fluxcd/pkg/untar v0.2.0
 	github.com/fluxcd/source-controller/api v1.1.0
 	github.com/google/go-github/v52 v52.0.0
-	github.com/open-component-model/git-controller v0.11.0
+	github.com/open-component-model/git-controller v0.11.1
 	github.com/open-component-model/mpas-project-controller v0.2.0
 	github.com/open-component-model/ocm v0.4.0
 	github.com/open-component-model/ocm-controller v0.18.1
