@@ -484,27 +484,27 @@ type mockSnapshotWriter struct {
 
 var _ snapshot.Writer = &mockSnapshotWriter{}
 
-func (m *mockSnapshotWriter) Write(ctx context.Context, owner ocmctrv1.SnapshotWriter, sourceDir string, identity ocmmetav1.Identity) (string, error) {
+func (m *mockSnapshotWriter) Write(ctx context.Context, owner ocmctrv1.SnapshotWriter, sourceDir string, identity ocmmetav1.Identity) (string, int64, error) {
 	productDeploymentContent, err := os.ReadFile(filepath.Join(sourceDir, "test-product-deployment-generator", "product-deployment.yaml"))
 	if err != nil {
-		return "", fmt.Errorf("failed to read product deployment content: %w", err)
+		return "", -1, fmt.Errorf("failed to read product deployment content: %w", err)
 	}
 
 	valuesContent, err := os.ReadFile(filepath.Join(sourceDir, "test-product-deployment-generator", "config.cue"))
 	if err != nil {
-		return "", fmt.Errorf("failed to read values file: %w", err)
+		return "", -1, fmt.Errorf("failed to read values file: %w", err)
 	}
 
 	readmeContent, err := os.ReadFile(filepath.Join(sourceDir, "test-product-deployment-generator", "README.md"))
 	if err != nil {
-		return "", fmt.Errorf("failed to read readme file: %w", err)
+		return "", -1, fmt.Errorf("failed to read readme file: %w", err)
 	}
 
 	m.productDeploymentContent = string(productDeploymentContent)
 	m.valuesContent = string(valuesContent)
 	m.readmeContent = string(readmeContent)
 
-	return m.digest, m.err
+	return m.digest, -1, m.err
 }
 
 type mockComponent struct {
@@ -527,12 +527,11 @@ func (m *mockComponent) GetResource(id ocmmetav1.Identity) (ocm.ResourceAccess, 
 	if err != nil {
 		return nil, err
 	}
-	return &mockResource{resource: r, ctx: ocm.DefaultContext()}, nil
+	return &mockResource[*ocm.ResourceMeta]{resource: r, ctx: ocm.DefaultContext()}, nil
 }
 
 func (m *mockComponent) Repository() ocm.Repository {
-	repository, _ := genericocireg.NewRepository(nil, nil, nil)
-	return repository
+	return genericocireg.NewRepository(nil, nil, nil)
 }
 
 func (m *mockComponent) Dup() (ocm.ComponentVersionAccess, error) {
@@ -543,16 +542,36 @@ func (m *mockComponent) Close() error {
 	return nil
 }
 
-type mockResource struct {
+type mockResource[M any] struct {
 	ctx      ocm.Context
 	resource ocmdesc.Resource
 }
 
-func (r *mockResource) Access() (ocm.AccessSpec, error) {
+func (r *mockResource[M]) GetComponentVersion() (ocm.ComponentVersionAccess, error) {
+	return nil, nil
+}
+
+func (r *mockResource[M]) GetOCMContext() ocm.Context {
+	return r.ctx
+}
+
+func (r *mockResource[M]) ReferenceHint() string {
+	return "mock resource"
+}
+
+func (r *mockResource[M]) GlobalAccess() ocm.AccessSpec {
+	return nil
+}
+
+func (r *mockResource[M]) BlobAccess() (ocm.BlobAccess, error) {
+	return nil, nil
+}
+
+func (r *mockResource[M]) Access() (ocm.AccessSpec, error) {
 	return r.ctx.AccessSpecForSpec(r.resource.Access)
 }
 
-func (r *mockResource) AccessMethod() (ocm.AccessMethod, error) {
+func (r *mockResource[M]) AccessMethod() (ocm.AccessMethod, error) {
 	ca, err := comparch.New(r.ctx, accessobj.ACC_CREATE, nil, nil, nil, 0600)
 	if err != nil {
 		return nil, err
@@ -564,10 +583,10 @@ func (r *mockResource) AccessMethod() (ocm.AccessMethod, error) {
 	return spec.AccessMethod(ca)
 }
 
-func (r *mockResource) ComponentVersion() ocm.ComponentVersionAccess {
+func (r *mockResource[M]) ComponentVersion() ocm.ComponentVersionAccess {
 	return nil
 }
 
-func (r *mockResource) Meta() *ocm.ResourceMeta {
+func (r *mockResource[M]) Meta() *ocm.ResourceMeta {
 	return &ocm.ResourceMeta{ElementMeta: *r.resource.GetMeta()}
 }

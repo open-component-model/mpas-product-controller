@@ -662,7 +662,7 @@ func (r *ProductDeploymentGeneratorReconciler) createSnapshot(
 		v1alpha1.ProductDeploymentNameKey: obj.Name,
 	}
 
-	digest, err := r.SnapshotWriter.Write(ctx, obj, dir, identity)
+	digest, _, err := r.SnapshotWriter.Write(ctx, obj, dir, identity)
 	if err != nil {
 		return "", fmt.Errorf("failed to write to the cache: %w", err)
 	}
