@@ -54,10 +54,10 @@ func TestProductDeploymentPipelineReconciler(t *testing.T) {
 		},
 		Spec: mpasv1alpha1.ProductDeploymentSpec{
 			Component: replicationv1.Component{
-				Name:    "github.com/skarlso/component",
+				Name:    "github.com/open-component-model/component",
 				Version: "0.0.1",
 				Registry: replicationv1.Registry{
-					URL: "https://github.com/Skarlso/test",
+					URL: "https://github.com/open-component-model/test",
 				},
 			},
 			Pipelines:          nil,
@@ -72,12 +72,12 @@ func TestProductDeploymentPipelineReconciler(t *testing.T) {
 		},
 		Spec: v1alpha1.ComponentVersionSpec{
 			Interval:  metav1.Duration{Duration: time.Second},
-			Component: "github.com/skarlso/component",
+			Component: "github.com/open-component-model/component",
 			Version: v1alpha1.Version{
 				Semver: "v0.0.1",
 			},
 			Repository: v1alpha1.Repository{
-				URL: "https://github.com/Skarlso/test",
+				URL: "https://github.com/open-component-model/test",
 			},
 			References: v1alpha1.ReferencesConfig{
 				Expand: true,
