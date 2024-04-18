@@ -353,6 +353,9 @@ func (r *ProductDeploymentReconciler) createOrUpdateComponentVersion(ctx context
 			Semver: obj.Spec.Component.Version,
 		}
 
+		// We need to update the replication-controller verification public key.
+		cv.Spec.Verify = signature
+
 		return nil
 	}); err != nil {
 		return fmt.Errorf("failed to create component version: %w", err)
