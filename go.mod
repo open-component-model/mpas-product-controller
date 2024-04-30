@@ -1,6 +1,6 @@
 module github.com/open-component-model/mpas-product-controller
 
-go 1.21
+go 1.22.1
 
 replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20220411205349-bde1400a84be
 
