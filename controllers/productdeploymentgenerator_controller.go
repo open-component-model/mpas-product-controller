@@ -66,7 +66,6 @@ const (
 `
 	componentVersionAnnotationKey = "mpas.ocm.system/component-version"
 	componentNameAnnotationKey    = "mpas.ocm.system/component-name"
-	ignoreMarker                  = "+mpas-ignore"
 )
 
 const (
@@ -406,6 +405,7 @@ func (r *ProductDeploymentGeneratorReconciler) createSync(
 				Message:    project.Spec.Git.CommitTemplate.Message,
 				BaseBranch: project.Spec.Git.DefaultBranch,
 			},
+
 			PullRequestTemplate: gitv1alpha1.PullRequestTemplate{
 				Title: fmt.Sprintf("MPAS System Automated Pull Request for Product: %s", prodDesc.Name),
 			},
@@ -582,9 +582,9 @@ func (r *ProductDeploymentGeneratorReconciler) createProductPipeline(
 
 	// if the list is empty, select one from the available targets.
 	for _, role := range description.Spec.TargetRoles {
-		role := role
 		if role.Name == p.TargetRoleName {
-			targetRole = &role.TargetRole
+			t := role.TargetRole
+			targetRole = &t
 
 			break
 		}

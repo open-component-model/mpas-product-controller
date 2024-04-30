@@ -200,10 +200,9 @@ func (r *ProductDeploymentReconciler) reconcile(ctx context.Context, obj *v1alph
 
 	obj.Status.ActivePipelines = nil
 	for _, ep := range existingPipelines.Items {
-		ep := ep
 		alreadyCreatedPipelines[ep.Name] = struct{}{}
 
-		if !conditions.IsTrue(&ep, meta.ReadyCondition) {
+		if !conditions.IsTrue(&ep, meta.ReadyCondition) { //nolint: gosec // it's 1.22
 			obj.Status.ActivePipelines = append(obj.Status.ActivePipelines, ep.Name)
 		}
 	}
@@ -405,9 +404,7 @@ func (r *ProductDeploymentReconciler) generateConfigMap(ctx context.Context, obj
 	// garbage collect old configmaps
 	var errf error
 	for _, cm := range existingMaps.Items {
-		cm := cm
-		err := r.Client.Delete(ctx, &cm)
-		if err != nil {
+		if err := r.Client.Delete(ctx, &cm); err != nil { //nolint:gosec // go 1.22
 			errf = errors.Join(errf, err)
 		}
 	}
